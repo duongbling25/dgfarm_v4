@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation'
 import type { Product, ProductType, ProductGroup } from '@/domain/entities/Product'
 import {
   addProductUseCase,
+  bulkAddProductsUseCase,
   updateProductUseCase,
   deleteProductsUseCase,
 } from '@/application/use-cases/product/ProductUseCases'
@@ -13,7 +14,7 @@ import { Overlay, PgBtn, DeleteBar, ConfirmDeleteModal, btnGreen } from '@/prese
 const GROUPS: ProductGroup[] = ['Trái cây', 'Rau củ', 'Thực phẩm', 'Đồ uống', 'Khác']
 const TYPES: ProductType[] = ['Hàng hóa', 'Dịch vụ', 'Combo - Đóng gói']
 const PER = 10
-const BRANCHES = ['Chi nhánh trung tâm', 'Chi nhánh 2', 'Chi nhánh 3']
+const BRANCHES = ['Chi nhánh trung tâm']
 
 const fmt = (n: number) => n.toLocaleString('vi-VN').replace(/\./g, ',')
 
@@ -52,7 +53,7 @@ function emptyForm() {
     name: '', group: 'Trái cây' as ProductGroup, type: 'Hàng hóa' as ProductType,
     sell_price: 0, cost_price: 0, stock: 0, min_stock: 0, max_stock: 999,
     location: '', brand: '', supplier_id: '', can_sell_direct: true,
-    has_points: false, note: '', image_url: '', expected_order: 0,
+    has_points: false, note: '', image_url: '', expected_order: 0, unit: '',
     branch_stock: {} as Record<string, number>,
   }
 }
@@ -61,6 +62,197 @@ const inp: React.CSSProperties = {
   width: '100%', height: 36, border: '1px solid #e2e8f0', borderRadius: 8,
   padding: '0 10px', fontSize: 13, outline: 'none', boxSizing: 'border-box',
   background: '#f8fafc',
+}
+
+// ── CSV Export ────────────────────────────────────────────────
+function exportToCSV(products: Product[]) {
+  const headers = ['Mã hàng','Tên hàng','Nhóm','Loại','Giá bán','Giá vốn','Tồn kho','Min','Max','Thương hiệu','Vị trí','Ghi chú']
+  const rows = products.map(p => [p.code,p.name,p.group,p.type,p.sell_price,p.cost_price,p.stock,p.min_stock,p.max_stock,p.brand??'',p.location??'',p.note??''])
+  const csv = [headers,...rows].map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n')
+  const blob = new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8;'})
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a'); a.href=url; a.download=`hang-hoa-${new Date().toISOString().slice(0,10)}.csv`; a.click(); URL.revokeObjectURL(url)
+}
+
+// ── CSV Import Modal ──────────────────────────────────────────
+function ImportModal({ onClose, onImported }: { onClose: () => void; onImported: () => void }) {
+  const [rows, setRows] = useState<any[]>([])
+  const [err, setErr] = useState('')
+  const [isPending, startTransition] = useTransition()
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  function splitCSVLine(line: string): string[] {
+    const result: string[] = []
+    let cur = '', inQ = false
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i]
+      if (ch === '"') {
+        if (inQ && line[i+1] === '"') { cur += '"'; i++ }
+        else inQ = !inQ
+      } else if (ch === ',' && !inQ) {
+        result.push(cur.trim()); cur = ''
+      } else cur += ch
+    }
+    result.push(cur.trim())
+    return result
+  }
+
+  function parseCSV(text: string) {
+    const lines = text.replace(/^\uFEFF/,'').replace(/\r/g,'').trim().split('\n').filter(Boolean)
+    if (lines.length < 2) { setErr('File không có dữ liệu'); return }
+    const headers = splitCSVLine(lines[0])
+    const colMap: Record<string,string> = {'Mã hàng':'id','Tên hàng':'name','Nhóm':'group','Loại':'type','Giá bán':'sell_price','Giá vốn':'cost_price','Tồn kho':'stock','Min':'min_stock','Max':'max_stock','Thương hiệu':'brand','Vị trí':'location','Ghi chú':'note'}
+    const idxMap: Record<string,number> = {}
+    headers.forEach((h,i)=>{ idxMap[h]=i })
+    const parsed = lines.slice(1).map(line => {
+      const cells = splitCSVLine(line)
+      const row: any = {group:'Khác',type:'Hàng hóa',sell_price:0,cost_price:0,stock:0,min_stock:0,max_stock:9999,can_sell_direct:true,has_points:false}
+      Object.entries(colMap).forEach(([header,field])=>{
+        if(idxMap[header]!==undefined){
+          const trimmed = (cells[idxMap[header]]??'').trim()
+          if(trimmed==='') return
+          row[field]=['sell_price','cost_price','stock','min_stock','max_stock'].includes(field)?Number(trimmed)||0:trimmed
+        }
+      })
+      const validGroups=['Trái cây','Rau củ','Thực phẩm','Đồ uống','Khác']
+      const validTypes=['Hàng hóa','Dịch vụ','Combo - Đóng gói']
+      if(!validGroups.includes(row.group)) row.group='Khác'
+      if(!validTypes.includes(row.type)) row.type='Hàng hóa'
+      return row
+    }).filter(r=>r.name?.trim())
+    if (!parsed.length) { setErr('Không tìm thấy dữ liệu hợp lệ'); return }
+    setRows(parsed); setErr('')
+  }
+
+  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]; if (!file) return
+    const isXlsx = /\.(xlsx|xls)$/i.test(file.name)
+    const reader = new FileReader()
+
+    function processRows(headers: string[], dataRows: any[][]) {
+      const colMap: Record<string,string> = {'Mã hàng':'id','Tên hàng':'name','Nhóm':'group','Loại':'type','Giá bán':'sell_price','Giá vốn':'cost_price','Tồn kho':'stock','Min':'min_stock','Max':'max_stock','Thương hiệu':'brand','Vị trí':'location','Ghi chú':'note'}
+      const idxMap: Record<string,number> = {}
+      headers.forEach((h,i)=>{ idxMap[h.trim()]=i })
+      const parsed = dataRows.map(cells => {
+        const row: any = {group:'Khác',type:'Hàng hóa',sell_price:0,cost_price:0,stock:0,min_stock:0,max_stock:9999,can_sell_direct:true,has_points:false}
+        Object.entries(colMap).forEach(([header,field])=>{
+          if(idxMap[header]!==undefined){
+            const val = String(cells[idxMap[header]]??'').trim()
+            if(val==='') return
+            row[field]=['sell_price','cost_price','stock','min_stock','max_stock'].includes(field)?Number(val)||0:val
+          }
+        })
+        const validGroups=['Trái cây','Rau củ','Thực phẩm','Đồ uống','Khác']
+        const validTypes=['Hàng hóa','Dịch vụ','Combo - Đóng gói']
+        if(!validGroups.includes(row.group)) row.group='Khác'
+        if(!validTypes.includes(row.type)) row.type='Hàng hóa'
+        return row
+      }).filter((r:any)=>r.name?.trim())
+      if(!parsed.length){setErr('Không tìm thấy dữ liệu hợp lệ');return}
+      setRows(parsed); setErr('')
+    }
+
+    if (isXlsx) {
+      reader.onload = ev => {
+        const loadXlsx = () => new Promise<any>(resolve => {
+          if ((window as any).XLSX) { resolve((window as any).XLSX); return }
+          const s = document.createElement('script')
+          s.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'
+          s.onload = () => resolve((window as any).XLSX)
+          document.head.appendChild(s)
+        })
+        loadXlsx().then(XLSX => {
+          const wb = XLSX.read(ev.target?.result, {type:'array'})
+          const ws = wb.Sheets[wb.SheetNames[0]]
+          const data: any[][] = XLSX.utils.sheet_to_json(ws, {header:1, defval:''})
+          if(data.length<2){setErr('File không có dữ liệu');return}
+          processRows(data[0] as string[], data.slice(1))
+        }).catch(()=>setErr('Không thể đọc file xlsx'))
+      }
+      reader.readAsArrayBuffer(file)
+    } else {
+      reader.onload = ev => parseCSV(ev.target?.result as string)
+      reader.readAsText(file,'utf-8')
+    }
+    e.target.value=''
+  }
+
+  function handleImport() {
+    startTransition(async () => {
+      try {
+        const results = await bulkAddProductsUseCase(rows)
+        const failed = results.filter((r: any) => !r.ok)
+        if (failed.length > 0) {
+          setErr(`${failed.length} dòng lỗi: ${failed[0].error}`)
+          return
+        }
+        onImported(); onClose()
+      } catch(e:any) { setErr(e.message ?? JSON.stringify(e)) }
+    })
+  }
+
+  
+
+  const L: React.CSSProperties = {fontSize:11,fontWeight:600,color:'#94A3B8',textTransform:'uppercase',letterSpacing:'0.5px',marginBottom:6}
+  return (
+    <Overlay>
+      <div style={{background:'#fff',borderRadius:16,width:540,maxHeight:'85vh',overflowY:'auto',padding:28,boxShadow:'0 8px 40px rgba(0,0,0,0.18)'}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:20}}>
+          <span style={{fontWeight:700,fontSize:17,color:'#0f172a'}}>Nhập file hàng hóa</span>
+          <button onClick={onClose} style={{border:'none',background:'none',fontSize:20,cursor:'pointer',color:'#94A3B8'}}>✕</button>
+        </div>
+        <div style={{background:'#f0fdf4',border:'1px solid #bbf7d0',borderRadius:10,padding:14,marginBottom:20}}>
+          <div style={{fontSize:13,color:'#166534',fontWeight:600,marginBottom:6}}>Cột CSV hỗ trợ:</div>
+          <div style={{fontSize:11,color:'#15803d',fontFamily:'monospace',lineHeight:1.8}}>Tên hàng, Nhóm, Loại, Giá bán, Giá vốn, Tồn kho, Min, Max, Thương hiệu, Vị trí, Ghi chú</div>
+          <button onClick={()=>{
+            const s='Mã hàng,Tên hàng,Nhóm,Loại,Giá bán,Giá vốn,Tồn kho,Min,Max,Thương hiệu,Vị trí,Ghi chú\n,Quýt Mỹ,Trái cây,Hàng hóa,25000,18000,100,10,500,DGFarm,A1,\n,Cà rốt Đà Lạt,Rau củ,Hàng hóa,15000,10000,200,20,1000,,B2,'
+            const blob=new Blob(['\uFEFF'+s],{type:'text/csv;charset=utf-8;'})
+            const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='mau-hang-hoa.csv'; a.click(); URL.revokeObjectURL(url)
+          }} style={{marginTop:10,fontSize:12,color:'#166534',background:'transparent',border:'1px solid #86efac',borderRadius:6,padding:'4px 12px',cursor:'pointer',fontWeight:600}}>
+            ⬇ Tải file mẫu
+          </button>
+        </div>
+        <div style={{marginBottom:16}}>
+          <div style={L}>Chọn file CSV</div>
+          <div onClick={()=>fileRef.current?.click()} style={{border:'2px dashed #cbd5e1',borderRadius:10,padding:'24px 16px',textAlign:'center',cursor:'pointer',background:'#f8fafc'}}>
+            <div style={{fontSize:24,marginBottom:6}}>📂</div>
+            <div style={{fontSize:13,color:'#64748B'}}>{rows.length>0?`Đã chọn ${rows.length} dòng — nhấn để đổi file`:'Nhấn để chọn file .csv hoặc .xlsx'}</div>
+          </div>
+          <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls,text/csv" style={{display:'none'}} onChange={handleFile}/>
+        </div>
+        {rows.length>0&&(
+          <div style={{marginBottom:16}}>
+            <div style={{...L,marginBottom:8}}>Xem trước — {rows.length} dòng</div>
+            <div style={{border:'1px solid #e2e8f0',borderRadius:8,overflow:'hidden',maxHeight:180,overflowY:'auto'}}>
+              <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
+                <thead><tr style={{background:'#f1f5f9'}}>
+                  {['Tên hàng','Nhóm','Giá bán','Tồn kho'].map(h=><th key={h} style={{padding:'6px 10px',textAlign:'left',fontWeight:600,color:'#475569',borderBottom:'1px solid #e2e8f0'}}>{h}</th>)}
+                </tr></thead>
+                <tbody>
+                  {rows.slice(0,8).map((r,i)=>(
+                    <tr key={i} style={{borderBottom:'1px solid #f1f5f9'}}>
+                      <td style={{padding:'6px 10px',color:'#334155'}}>{r.name}</td>
+                      <td style={{padding:'6px 10px',color:'#64748B'}}>{r.group}</td>
+                      <td style={{padding:'6px 10px'}}>{r.sell_price?.toLocaleString('vi-VN')}</td>
+                      <td style={{padding:'6px 10px'}}>{r.stock}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {rows.length>8&&<div style={{fontSize:12,color:'#94A3B8',marginTop:4}}>...và {rows.length-8} dòng khác</div>}
+          </div>
+        )}
+        {err&&<div style={{padding:'8px 12px',background:'#fef2f2',color:'#dc2626',borderRadius:8,fontSize:13,marginBottom:12}}>{err}</div>}
+        <div style={{display:'flex',justifyContent:'flex-end',gap:10}}>
+          <button onClick={onClose} style={{border:'1px solid #e2e8f0',background:'#fff',borderRadius:8,height:36,padding:'0 20px',fontSize:13,cursor:'pointer',color:'#49636F'}}>Hủy</button>
+          <button onClick={handleImport} disabled={rows.length===0||isPending} style={{...btnGreen,borderRadius:8,height:36,padding:'0 24px',opacity:rows.length===0?.5:1}}>
+            {isPending?'Đang nhập...':rows.length>0?`Nhập ${rows.length} hàng`:'Nhập'}
+          </button>
+        </div>
+      </div>
+    </Overlay>
+  )
 }
 
 function NumInput({ value, onChange, placeholder }: { value: number; onChange: (v: number) => void; placeholder?: string }) {
@@ -136,7 +328,8 @@ function ProductModal({ initial, onClose, onSaved }: {
     can_sell_direct: initial.can_sell_direct, has_points: initial.has_points,
     note: initial.note ?? '', image_url: initial.image_url ?? '',
     expected_order: initial.expected_order ?? 0,
-    branch_stock: (initial as any).branch_stock ?? {} as Record<string, number>,
+    unit: (initial as any).unit ?? '',
+    branch_stock: (initial as any).branch_stock ?? { 'Chi nhánh trung tâm': initial.stock } as Record<string, number>,
   } : emptyForm())
 
   const [isPending, startTransition] = useTransition()
@@ -205,26 +398,11 @@ function ProductModal({ initial, onClose, onSaved }: {
           <div><div style={L}>Định mức tồn Min</div><NumInput value={form.min_stock} onChange={v => set('min_stock', v)} /></div>
           <div><div style={L}>Định mức tồn Max</div><NumInput value={form.max_stock} onChange={v => set('max_stock', v)} /></div>
           <div><div style={L}>Thương hiệu</div><input style={inp} value={form.brand} onChange={e => set('brand', e.target.value)} placeholder="Chưa có" /></div>
-          <div><div style={L}>Vị trí kho</div><input style={inp} value={form.location} onChange={e => set('location', e.target.value)} placeholder="Aisle 4, Shelf B" /></div>
+          <div><div style={L}>Đơn vị tính</div><input style={inp} value={form.unit} onChange={e => set('unit', e.target.value)} placeholder="kg, quả, thùng, hộp..." /></div>
+          <div><div style={L}>Vị trí kho</div><input style={inp} value={form.location} onChange={e => set('location', e.target.value)} placeholder="Kệ 4, tủ 5" /></div>
           <div style={{ gridColumn: '1/-1' }}>
             <div style={L}>Nhà cung cấp (ID)</div>
             <input style={inp} value={form.supplier_id} onChange={e => set('supplier_id', e.target.value)} placeholder="Mã nhà cung cấp" />
-          </div>
-
-          {/* Tồn kho theo chi nhánh */}
-          <div style={{ gridColumn: '1/-1' }}>
-            <div style={{ ...L, marginBottom: 10 }}>Tồn kho theo chi nhánh</div>
-            <div style={{ border: '1px solid #e2e8f0', borderRadius: 8, overflow: 'hidden' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 140px', background: '#f1f5f9', padding: '8px 12px', fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                <span>Chi nhánh</span><span>Tồn kho</span>
-              </div>
-              {BRANCHES.map((branch, i) => (
-                <div key={branch} style={{ display: 'grid', gridTemplateColumns: '1fr 140px', padding: '8px 12px', alignItems: 'center', borderTop: '1px solid #f1f5f9', background: i % 2 === 0 ? '#fff' : '#fafafa' }}>
-                  <span style={{ fontSize: 13, color: '#334155' }}>{branch}</span>
-                  <NumInput value={form.branch_stock[branch] ?? 0} onChange={v => setBranchStock(branch, v)} />
-                </div>
-              ))}
-            </div>
           </div>
 
           {/* Upload ảnh */}
@@ -275,7 +453,7 @@ function ExpandedRow({ product, onEdit }: { product: Product; onEdit: () => void
       </div>
     )
   }
-  const branchStock: Record<string, number> = (product as any).branch_stock ?? {}
+  const branchStock: Record<string, number> = (product as any).branch_stock ?? { 'Chi nhánh trung tâm': product.stock }
 
   return (
     <div style={{ background: '#fff', borderLeft: '4px solid rgba(0,110,28,0.2)', borderRight: '4px solid rgba(0,110,28,0.2)', borderRadius: 8, padding: '9px 0' }}>
@@ -327,7 +505,7 @@ function ExpandedRow({ product, onEdit }: { product: Product; onEdit: () => void
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '24px 0', marginBottom: 24 }}>
                 <Field label="Thương hiệu" value={product.brand} />
-                <Field label="Định mức tồn" value={`Min: ${fmt(product.min_stock)} | Max: ${fmt(product.max_stock)}`} />
+                <Field label="Đơn vị tính" value={(product as any).unit} />
                 <Field label="Vị trí" value={product.location} />
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '24px 0', marginBottom: 24 }}>
@@ -387,7 +565,7 @@ function ExpandedRow({ product, onEdit }: { product: Product; onEdit: () => void
                   {BRANCHES.map((branch, i) => (
                     <div key={branch} style={{ display: 'grid', gridTemplateColumns: '1fr 130px 120px', padding: '10px 16px', background: i % 2 === 0 ? '#fff' : '#fafafa', borderTop: '1px solid #f1f5f9' }}>
                       <span style={{ fontSize: 13, color: '#334155' }}>{branch}</span>
-                      <span style={{ fontSize: 13, fontWeight: 600, color: '#374151', textAlign: 'right' as const }}>{fmt(branchStock[branch] ?? 0)}</span>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: '#374151', textAlign: 'right' as const }}>{fmt(branchStock[branch] || 0)}</span>
                       <span style={{ fontSize: 13, color: '#9CA3AF', textAlign: 'right' as const }}>0</span>
                     </div>
                   ))}
@@ -411,7 +589,15 @@ function TableRow({ product, selected, expanded, onSelect, onExpand, onEdit }: {
         onMouseEnter={e => (e.currentTarget.style.background = '#fafbfc')}
         onMouseLeave={e => (e.currentTarget.style.background = '#fff')}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px 12px' }} onClick={e => { e.stopPropagation(); onSelect() }}>
-          <input type="checkbox" checked={selected} onChange={onSelect} style={{ width: 16, height: 16, accentColor: '#006E1C', cursor: 'pointer' }} />
+          <input
+  type="checkbox"
+  checked={selected}
+  onChange={e => {
+    e.stopPropagation()
+    onSelect()
+  }}
+  style={{ width: 16, height: 16, accentColor: '#006E1C', cursor: 'pointer' }}
+/>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', padding: '20px 12px' }}>
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style={{ transform: expanded ? 'rotate(90deg)' : 'none', transition: '0.15s' }}>
@@ -517,6 +703,7 @@ export default function ProductTable({ initialProducts }: { initialProducts: Pro
   const [selected, setSelected]       = useState<Set<string>>(new Set())
   const [expandedId, setExpandedId]   = useState<string | null>(null)
   const [showAdd, setShowAdd]         = useState(false)
+  const [showImport, setShowImport]   = useState(false)
   const [editProduct, setEditProduct] = useState<Product | null>(null)
   const [showConfirmDelete, setShowConfirmDelete] = useState(false)
   const [isPending, startTransition]  = useTransition()
@@ -572,10 +759,10 @@ export default function ProductTable({ initialProducts }: { initialProducts: Pro
             <button onClick={() => setShowAdd(true)} style={{ ...btnGreen, borderRadius: 12, height: 36, padding: '0 16px', gap: 6 }}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Thêm hàng
             </button>
-            <button style={{ ...btnGreen, borderRadius: 12, height: 36, padding: '0 16px', gap: 6 }}>
+            <button onClick={() => setShowImport(true)} style={{ ...btnGreen, borderRadius: 12, height: 36, padding: '0 16px', gap: 6 }}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>Nhập file
             </button>
-            <button style={{ ...btnGreen, borderRadius: 12, height: 36, padding: '0 16px', gap: 6 }}>
+            <button onClick={() => exportToCSV(filtered)} style={{ ...btnGreen, borderRadius: 12, height: 36, padding: '0 16px', gap: 6 }}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Xuất file
             </button>
           </div>
@@ -583,7 +770,15 @@ export default function ProductTable({ initialProducts }: { initialProducts: Pro
 
         <div style={{ display: 'grid', gridTemplateColumns: '48px 40px 128px 1fr 112px 112px 96px 96px', background: '#F9FAFB', borderBottom: '1px solid #E5E7EB' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 12 }}>
-            <input type="checkbox" checked={paginated.length > 0 && paginated.every(p => selected.has(p.id))} onChange={toggleAll} style={{ width: 16, height: 16, accentColor: '#006E1C', cursor: 'pointer' }} />
+            <input
+  type="checkbox"
+  checked={paginated.length > 0 && paginated.every(p => selected.has(p.id))}
+  onChange={e => {
+    e.stopPropagation()
+    toggleAll()
+  }}
+  style={{ width: 16, height: 16, accentColor: '#006E1C', cursor: 'pointer' }}
+/>
           </div>
           <div />
           {[{ label: 'Mã hàng', align: 'left' }, { label: 'Tên hàng', align: 'left' }, { label: 'Giá bán', align: 'right' }, { label: 'Giá vốn', align: 'right' }, { label: 'Tồn kho', align: 'right' }, { label: 'Dự kiến hết hàng', align: 'left' }].map(col => (
@@ -614,6 +809,7 @@ export default function ProductTable({ initialProducts }: { initialProducts: Pro
       </div>
 
       {showAdd     && <ProductModal onClose={() => setShowAdd(false)} onSaved={handleSaved} />}
+      {showImport  && <ImportModal onClose={() => setShowImport(false)} onImported={() => { window.location.reload() }} />}
       {editProduct && <ProductModal initial={editProduct} onClose={() => setEditProduct(null)} onSaved={handleSaved} />}
       {showConfirmDelete && <ConfirmDeleteModal count={selected.size} isPending={isPending} onConfirm={handleDelete} onCancel={() => setShowConfirmDelete(false)} />}
       <DeleteBar count={selected.size} onDelete={() => setShowConfirmDelete(true)} />

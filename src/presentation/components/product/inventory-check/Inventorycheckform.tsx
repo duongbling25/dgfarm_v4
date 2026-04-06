@@ -1,7 +1,7 @@
 'use client'
 
 // ============================================================
-// PRESENTATION LAYER - Inventorycheckform.tsx
+// PRESENTATION LAYER - InventoryCheckForm.tsx
 // Nhiệm vụ: Form nhập số lượng thực tế khi kiểm kho.
 //   - "Lưu tạm": gọi repo.saveDraft() – chỉ lưu actual_quantity
 //   - "Hoàn thành": gọi AdjustStockUseCase – cân bằng thật sự
@@ -14,7 +14,14 @@ import { InventoryRepository } from '@/infrastructure/supabase/repositories/Inve
 import { AdjustStockUseCase } from '@/application/use-cases/inventory/AdjustStockUseCase';
 
 const repo = new InventoryRepository();
-const adjustStockUseCase = new AdjustStockUseCase();
+const adjustStockUseCase = new AdjustStockUseCase(); // ✅ Inject repo vào UseCase
+
+// ─── SVG Icons ────────────────────────────────────────────
+const BackIcon = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>;
+const SearchIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>;
+const SaveIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>;
+const CheckIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="20 6 9 17 4 12"/></svg>;
+const ChevronDownIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"/></svg>;
 
 interface InventoryCheckFormProps {
   checkId: string;
@@ -122,7 +129,13 @@ export const InventoryCheckForm: React.FC<InventoryCheckFormProps> = ({
       )}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <div style={{ backgroundColor: '#fff', borderBottom: '1px solid #E5E7EB', padding: '12px 20px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <button onClick={onBack} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6B7280', fontSize: '20px' }}>←</button>
+          <button 
+            onClick={onBack} 
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6B7280', fontSize: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '4px' }}
+            title="Quay lại"
+          >
+            <BackIcon />
+          </button>
           <div>
             <h2 style={{ fontSize: '16px', fontWeight: 700, color: '#111827', margin: 0 }}>{check.code}</h2>
             <div style={{ fontSize: '12px', color: '#6B7280', marginTop: '2px' }}>Tạo bởi {check.creator}</div>
@@ -188,11 +201,19 @@ export const InventoryCheckForm: React.FC<InventoryCheckFormProps> = ({
         </div>
         {isEditable && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: 'auto' }}>
-            <button onClick={handleSaveDraft} disabled={saving} style={{ padding: '10px', backgroundColor: '#fff', color: '#0055AA', border: '2px solid #0055AA', borderRadius: '4px', fontWeight: 600, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1 }}>
-              {saving ? 'Đang lưu...' : '💾 Lưu tạm'}
+            <button 
+              onClick={handleSaveDraft} 
+              disabled={saving} 
+              style={{ padding: '10px', backgroundColor: '#fff', color: '#0055AA', border: '2px solid #0055AA', borderRadius: '4px', fontWeight: 600, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+            >
+              <SaveIcon /> {saving ? 'Đang lưu...' : 'Lưu tạm'}
             </button>
-            <button onClick={handleComplete} disabled={completing} style={{ padding: '10px', backgroundColor: '#008B00', color: '#fff', border: 'none', borderRadius: '4px', fontWeight: 600, cursor: completing ? 'not-allowed' : 'pointer', opacity: completing ? 0.6 : 1 }}>
-              {completing ? 'Đang xử lý...' : '✓ Hoàn thành – Cân bằng kho'}
+            <button 
+              onClick={handleComplete} 
+              disabled={completing} 
+              style={{ padding: '10px', backgroundColor: '#008B00', color: '#fff', border: 'none', borderRadius: '4px', fontWeight: 600, cursor: completing ? 'not-allowed' : 'pointer', opacity: completing ? 0.6 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+            >
+              <CheckIcon /> {completing ? 'Đang xử lý...' : 'Hoàn thành – Cân bằng kho'}
             </button>
           </div>
         )}

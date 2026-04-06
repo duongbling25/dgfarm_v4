@@ -1,12 +1,17 @@
 'use client'
 
-// ============================================================
-// PRESENTATION LAYER - InventoryCheckList.tsx
-// ...
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { InventoryCheck, InventoryItem, InventoryFilter, InventoryStatus } from '@/domain/entities/Inventory';
 import { InventoryRepository } from '@/infrastructure/supabase/repositories/InventoryRepository';
+
+const repo = new InventoryRepository();
+
+// ─── SVG Icons ────────────────────────────────────────────
+const SearchIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>;
+const EditIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>;
+const TrashIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>;
+const PlusIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>;
+const ChevronDownIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"/></svg>;
 
 // ─── Status Badge ──────────────────────────────────────────
 const StatusBadge: React.FC<{ status: InventoryStatus }> = ({ status }) => {
@@ -33,8 +38,6 @@ const StatusBadge: React.FC<{ status: InventoryStatus }> = ({ status }) => {
 };
 
 // ─── Expanded Detail Row ──────────────────────────────────
-const repo = new InventoryRepository();
-
 const ExpandedDetail: React.FC<{
   check: InventoryCheck;
   onCancel: (id: string) => void;
@@ -115,15 +118,15 @@ const ExpandedDetail: React.FC<{
                 <>
                   <button
                     onClick={() => onOpenForm(check.id)}
-                    style={{ padding: '7px 14px', backgroundColor: '#0055AA', color: '#fff', border: 'none', borderRadius: '4px', fontWeight: 600, cursor: 'pointer', fontSize: '13px' }}
+                    style={{ padding: '7px 14px', backgroundColor: '#0055AA', color: '#fff', border: 'none', borderRadius: '4px', fontWeight: 600, cursor: 'pointer', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}
                   >
-                    ✎ Mở phiếu
+                    <EditIcon /> Mở phiếu
                   </button>
                   <button
                     onClick={() => onCancel(check.id)}
-                    style={{ padding: '7px 14px', backgroundColor: '#fff', color: '#6B7280', border: '1px solid #D1D5DB', borderRadius: '4px', fontWeight: 500, cursor: 'pointer', fontSize: '13px' }}
+                    style={{ padding: '7px 14px', backgroundColor: '#fff', color: '#6B7280', border: '1px solid #D1D5DB', borderRadius: '4px', fontWeight: 500, cursor: 'pointer', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}
                   >
-                    🗑 Hủy phiếu
+                    <TrashIcon /> Hủy phiếu
                   </button>
                 </>
               )}
@@ -234,18 +237,23 @@ export const InventoryCheckList: React.FC<InventoryCheckListProps> = ({ onOpenFo
       <main style={{ flex: 1, padding: '20px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '16px' }}>
         {/* Toolbar */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <input
-            type="text"
-            placeholder="Tìm theo mã phiếu kiểm..."
-            value={filters.searchCode || ''}
-            onChange={(e) => setFilters((f) => ({ ...f, searchCode: e.target.value }))}
-            style={{ padding: '8px 14px', border: '1px solid #D1D5DB', borderRadius: '4px', fontSize: '14px', width: '280px', backgroundColor: '#fff' }}
-          />
+          <div style={{ position: 'relative', width: '280px' }}>
+            <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#9CA3AF' }}>
+              <SearchIcon />
+            </span>
+            <input
+              type="text"
+              placeholder="Tìm theo mã phiếu kiểm..."
+              value={filters.searchCode || ''}
+              onChange={(e) => setFilters((f) => ({ ...f, searchCode: e.target.value }))}
+              style={{ padding: '8px 14px 8px 32px', border: '1px solid #D1D5DB', borderRadius: '4px', fontSize: '14px', width: '100%', backgroundColor: '#fff', boxSizing: 'border-box' }}
+            />
+          </div>
           <button
             onClick={onCreateNew}
-            style={{ padding: '8px 18px', backgroundColor: '#0055AA', color: '#fff', border: 'none', borderRadius: '4px', fontWeight: 600, cursor: 'pointer', fontSize: '14px' }}
+            style={{ padding: '8px 18px', backgroundColor: '#0055AA', color: '#fff', border: 'none', borderRadius: '4px', fontWeight: 600, cursor: 'pointer', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}
           >
-            + Tạo phiếu kiểm
+            <PlusIcon /> Tạo phiếu kiểm
           </button>
         </div>
 

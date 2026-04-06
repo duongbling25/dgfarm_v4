@@ -10,12 +10,12 @@
 // KHÔNG render UI, KHÔNG gọi Supabase trực tiếp (qua Repository).
 // ============================================================
 
-import { InventoryRepository } from '../../infrastructure/repositories/InventoryRepository';
+import { InventoryRepository } from '@/infrastructure/supabase/repositories/InventoryRepository';
 import {
   AdjustStockInputDTO,
   InventoryCheckItemDTO,
   validateAdjustStockInput,
-} from '../dtos/InventoryInput.dto';
+} from '@/application/dto/Inventoryinput.dto';
 
 export interface AdjustStockResult {
   success: boolean;
@@ -82,4 +82,4 @@ export class AdjustStockUseCase {
       };
     }
   }
-} 
+}

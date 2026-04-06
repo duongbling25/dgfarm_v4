@@ -22,25 +22,70 @@ export async function addProductUseCase(form: AddProductDTO) {
   if (form.min_stock < 0)          throw new Error('Định mức min không hợp lệ')
   if (form.max_stock < form.min_stock) throw new Error('Định mức max phải ≥ min')
 
-  return getProductRepository().add({
-    name:           form.name.trim(),
-    group:          form.group,
-    type:           form.type,
-    sell_price:     form.sell_price,
-    cost_price:     form.cost_price,
-    stock:          form.stock,
-    min_stock:      form.min_stock,
-    max_stock:      form.max_stock,
-    location:       form.location || null,
-    brand:          form.brand || null,
-    supplier_id:    form.supplier_id || null,
-    supplier_name:  null,
+  // Tìm xem đã tồn tại chưa (theo id nếu có, hoặc theo tên)
+  const repo = getProductRepository()
+  if ((form as any).id?.trim()) {
+    const existing = await repo.getById((form as any).id)
+    if (existing) {
+      return repo.update(existing.id, {
+        ...form,
+        stock: existing.stock + form.stock, // cộng dồn tồn kho
+      })
+    }
+  }
+
+  return repo.add({
+    name: form.name.trim(),
+    group: form.group,
+    type: form.type,
+    sell_price: form.sell_price,
+    cost_price: form.cost_price,
+    stock: form.stock,
+    min_stock: form.min_stock,
+    max_stock: form.max_stock,
+    location: form.location || null,
+    brand: form.brand || null,
+    supplier_id: form.supplier_id || null,
+    supplier_name: null,
     can_sell_direct: form.can_sell_direct,
-    has_points:     form.has_points,
-    note:           form.note || null,
-    image_url:      form.image_url || null,
+    has_points: form.has_points,
+    note: form.note || null,
+    image_url: form.image_url || null,
     expected_order: form.expected_order ?? null,
+    unit: (form as any).unit ?? null,
   })
+}
+
+export async function bulkAddProductsUseCase(forms: AddProductDTO[]) {
+  const results = []
+  // Gom nhóm theo id (nếu có) để cộng dồn stock trước khi gửi
+  const merged = new Map<string, AddProductDTO>()
+  const ordered: AddProductDTO[] = []
+
+  for (const form of forms) {
+    const key = (form as any).id?.trim()
+    if (key) {
+      if (merged.has(key)) {
+        merged.get(key)!.stock += form.stock
+      } else {
+        const clone = { ...form }
+        merged.set(key, clone)
+        ordered.push(clone)
+      }
+    } else {
+      ordered.push(form)
+    }
+  }
+
+  for (const form of ordered) {
+    try {
+      await addProductUseCase(form)
+      results.push({ ok: true })
+    } catch (e: any) {
+      results.push({ ok: false, error: e.message })
+    }
+  }
+  return results
 }
 
 export async function updateProductUseCase(id: string, form: UpdateProductDTO) {

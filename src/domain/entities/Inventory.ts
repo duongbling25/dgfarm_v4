@@ -5,9 +5,13 @@
 // KHÔNG chứa logic, KHÔNG gọi API, KHÔNG import thư viện ngoài.
 // ============================================================
 
+import { ReactNode } from "react";
+
 export type InventoryStatus = 'Phiếu tạm' | 'Đã cân bằng' | 'Đã hủy';
 
 export interface InventoryCheck {
+  increase_qty: ReactNode;
+  item_count: ReactNode;
   id: string;
   code: string;
   creator: string;

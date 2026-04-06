@@ -2,7 +2,7 @@
 // INFRASTRUCTURE LAYER - InventoryRepository.ts
 // ...
 // ============================================================
-
+'use client'
 import { createClient } from '@/infrastructure/supabase/client';
 import { InventoryCheck, InventoryItem, InventoryFilter } from '@/domain/entities/Inventory';
 import { InventoryCheckItemDTO } from '@/application/dto/Inventoryinput.dto';
