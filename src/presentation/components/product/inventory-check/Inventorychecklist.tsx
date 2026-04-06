@@ -1,148 +1,158 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { InventoryCheck, InventoryItem, InventoryFilter, InventoryStatus } from '@/domain/entities/Inventory';
+import { InventoryCheck, InventoryItem, InventoryStatus, InventoryFilter } from '@/domain/entities/Inventory';
 import { InventoryRepository } from '@/infrastructure/supabase/repositories/InventoryRepository';
 
 const repo = new InventoryRepository();
 
-// ─── SVG Icons ────────────────────────────────────────────
-const SearchIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>;
-const EditIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>;
-const TrashIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>;
-const PlusIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>;
-const ChevronDownIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"/></svg>;
+const SearchIcon = () => <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" /></svg>;
+const PlusIcon = () => <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>;
+const SettingsIcon = () => <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" /></svg>;
 
-// ─── Status Badge ──────────────────────────────────────────
+// FIX: Helper tính khoảng thời gian cho filter ngày/tuần
+function getDateRange(preset: 'today' | 'this_week' | 'all'): { from?: string; to?: string } {
+  if (preset === 'all') return {}
+  const now = new Date()
+  if (preset === 'today') {
+    const from = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0).toISOString()
+    const to = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59).toISOString()
+    return { from, to }
+  }
+  if (preset === 'this_week') {
+    // Tuần bắt đầu từ thứ 2 (Monday)
+    const dayOfWeek = now.getDay() === 0 ? 6 : now.getDay() - 1
+    const monday = new Date(now)
+    monday.setDate(now.getDate() - dayOfWeek)
+    monday.setHours(0, 0, 0, 0)
+    const sunday = new Date(monday)
+    sunday.setDate(monday.getDate() + 6)
+    sunday.setHours(23, 59, 59, 999)
+    return { from: monday.toISOString(), to: sunday.toISOString() }
+  }
+  return {}
+}
+
 const StatusBadge: React.FC<{ status: InventoryStatus }> = ({ status }) => {
-  const config: Record<InventoryStatus, { bg: string; text: string; color: string }> = {
-    'Phiếu tạm':   { bg: '#FFF7ED', text: '#C2410C', color: '#FDBA74' },
-    'Đã cân bằng': { bg: '#F0FDF4', text: '#15803D', color: '#86EFAC' },
-    'Đã hủy':      { bg: '#FEF2F2', text: '#B91C1C', color: '#FCA5A5' },
+  const styles = {
+    'Phiếu tạm': 'bg-orange-100 text-orange-600',
+    'Đã cân bằng': 'bg-green-100 text-green-700',
+    'Đã hủy': 'bg-red-100 text-red-700',
   };
-  const c = config[status];
   return (
-    <span style={{
-      padding: '3px 10px',
-      backgroundColor: c.bg,
-      color: c.text,
-      borderRadius: '20px',
-      fontSize: '12px',
-      fontWeight: 600,
-      border: `1px solid ${c.color}`,
-      whiteSpace: 'nowrap',
-    }}>
+    <span className={`px-2 py-1 rounded text-xs font-semibold whitespace-nowrap ${styles[status]}`}>
       {status}
     </span>
   );
 };
 
-// ─── Expanded Detail Row ──────────────────────────────────
 const ExpandedDetail: React.FC<{
   check: InventoryCheck;
-  onCancel: (id: string) => void;
   onOpenForm: (id: string) => void;
-}> = ({ check, onCancel, onOpenForm }) => {
+  onCancel: (id: string) => void;
+}> = ({ check, onOpenForm, onCancel }) => {
   const [items, setItems] = useState<InventoryItem[]>([]);
-  const [loadingItems, setLoadingItems] = useState(true);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    repo.getCheckItems(check.id).then((data) => {
+    repo.getCheckItems(check.id).then(data => {
       setItems(data);
-      setLoadingItems(false);
+      setLoading(false);
     });
   }, [check.id]);
 
   return (
     <tr>
-      <td colSpan={10} style={{ padding: 0 }}>
-        <div style={{
-          borderLeft: '3px solid #0055AA',
-          margin: '0 0 0 0',
-          padding: '20px 24px',
-          backgroundColor: '#F8FAFF',
-        }}>
-          {/* Header info */}
-          <div style={{ display: 'flex', gap: '48px', marginBottom: '16px', fontSize: '13px' }}>
-            {[
-              { label: 'Người tạo', value: check.creator },
-              { label: 'Ngày tạo', value: new Date(check.created_at).toLocaleDateString('vi-VN') },
-              { label: 'Người cân bằng', value: check.balanced_by || '—' },
-              { label: 'Ngày cân bằng', value: check.balanced_at ? new Date(check.balanced_at).toLocaleDateString('vi-VN') : '—' },
-            ].map((info) => (
-              <div key={info.label}>
-                <div style={{ color: '#6B7280', marginBottom: '2px' }}>{info.label}</div>
-                <div style={{ color: '#111827', fontWeight: 500 }}>{info.value}</div>
-              </div>
-            ))}
+      <td colSpan={10} className="p-0">
+        <div className="p-6 border-l-4 border-[#0055AA] bg-white shadow-inner">
+          <div className="flex items-center gap-3 pb-4 border-b border-gray-200 mb-4">
+            <h4 className="text-xl font-bold text-gray-800">{check.code}</h4>
+            <StatusBadge status={check.status} />
           </div>
 
-          {/* Items mini-table */}
-          {loadingItems ? (
-            <div style={{ color: '#6B7280', fontSize: '13px' }}>Đang tải sản phẩm...</div>
-          ) : (
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', marginBottom: '16px' }}>
-              <thead>
-                <tr style={{ backgroundColor: '#EFF6FF', borderBottom: '1px solid #BFDBFE' }}>
-                  {['Mã hàng', 'Tên hàng', 'ĐVT', 'Tồn kho', 'Thực tế', 'SL lệch', 'Giá trị lệch'].map((h) => (
-                    <th key={h} style={{ padding: '7px 10px', textAlign: h === 'Mã hàng' || h === 'Tên hàng' || h === 'ĐVT' ? 'left' : 'right', fontWeight: 600, color: '#1E40AF' }}>
-                      {h}
-                    </th>
-                  ))}
+          <div className="grid grid-cols-2 gap-3 mb-4 text-sm">
+            <div className="flex gap-2">
+              <span className="text-gray-500">Người tạo:</span>
+              <span className="font-medium text-gray-800">{check.creator}</span>
+            </div>
+            <div className="flex gap-2">
+              <span className="text-gray-500">Ngày tạo:</span>
+              <span className="font-medium text-gray-800">{new Date(check.created_at).toLocaleDateString('vi-VN')}</span>
+            </div>
+            <div className="flex gap-2">
+              <span className="text-gray-500">Người cân bằng:</span>
+              <span className="font-medium text-gray-800">{check.balanced_by || 'Chưa có'}</span>
+            </div>
+            <div className="flex gap-2">
+              <span className="text-gray-500">Ngày cân bằng:</span>
+              <span className="font-medium text-gray-800">{check.balanced_at ? new Date(check.balanced_at).toLocaleDateString('vi-VN') : 'Chưa có'}</span>
+            </div>
+          </div>
+
+          <div className="border border-gray-200 rounded overflow-hidden mb-4">
+            <table className="w-full text-xs text-left border-collapse">
+              <thead className="bg-gray-100 border-b border-gray-200">
+                <tr>
+                  <th className="p-2 font-semibold">Mã hàng</th>
+                  <th className="p-2 font-semibold">Tên hàng</th>
+                  <th className="p-2 font-semibold text-right">Tồn kho</th>
+                  <th className="p-2 font-semibold text-right">Thực tế</th>
+                  <th className="p-2 font-semibold text-right">SL lệch</th>
+                  <th className="p-2 font-semibold text-right">Giá trị lệch</th>
                 </tr>
               </thead>
               <tbody>
-                {items.map((item) => (
-                  <tr key={item.id} style={{ borderBottom: '1px solid #E5E7EB' }}>
-                    <td style={{ padding: '7px 10px', color: '#0055AA', fontWeight: 500 }}>{item.product_id}</td>
-                    <td style={{ padding: '7px 10px', color: '#111827' }}>{item.product_name}</td>
-                    <td style={{ padding: '7px 10px', color: '#6B7280' }}>{item.unit}</td>
-                    <td style={{ padding: '7px 10px', textAlign: 'right', color: '#374151' }}>{item.stock_quantity}</td>
-                    <td style={{ padding: '7px 10px', textAlign: 'right', color: '#374151' }}>{item.actual_quantity}</td>
-                    <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: 600, color: item.diff_quantity > 0 ? '#15803D' : item.diff_quantity < 0 ? '#B91C1C' : '#374151' }}>
-                      {item.diff_quantity > 0 ? `+${item.diff_quantity}` : item.diff_quantity}
-                    </td>
-                    <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: 600, color: item.diff_value > 0 ? '#15803D' : item.diff_value < 0 ? '#B91C1C' : '#374151' }}>
-                      {item.diff_value.toLocaleString('vi-VN')}đ
-                    </td>
+                {loading ? (
+                  <tr><td colSpan={6} className="p-4 text-center text-gray-400">Đang tải...</td></tr>
+                ) : items.map(it => (
+                  <tr key={it.id} className="border-b border-gray-100">
+                    <td className="p-2 text-[#0055AA] font-semibold">{it.product_id}</td>
+                    <td className="p-2">{it.product_name}</td>
+                    <td className="p-2 text-right">{it.stock_quantity}</td>
+                    <td className="p-2 text-right">{it.actual_quantity}</td>
+                    <td className="p-2 text-right font-bold text-red-500">{it.actual_quantity - it.stock_quantity}</td>
+                    <td className="p-2 text-right">{((it.actual_quantity - it.stock_quantity) * it.sell_price).toLocaleString('vi-VN')}đ</td>
                   </tr>
                 ))}
               </tbody>
             </table>
-          )}
+          </div>
 
-          {/* Summary + Actions */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-            <div style={{ display: 'flex', gap: '8px' }}>
+          <div className="flex justify-between items-end">
+            <div className="flex gap-2">
               {check.status === 'Phiếu tạm' && (
                 <>
                   <button
                     onClick={() => onOpenForm(check.id)}
-                    style={{ padding: '7px 14px', backgroundColor: '#0055AA', color: '#fff', border: 'none', borderRadius: '4px', fontWeight: 600, cursor: 'pointer', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}
+                    className="bg-[#0055AA] text-white px-4 py-2 rounded font-semibold text-sm hover:bg-[#004488]"
                   >
-                    <EditIcon /> Mở phiếu
+                    ✎ Mở phiếu
                   </button>
                   <button
                     onClick={() => onCancel(check.id)}
-                    style={{ padding: '7px 14px', backgroundColor: '#fff', color: '#6B7280', border: '1px solid #D1D5DB', borderRadius: '4px', fontWeight: 500, cursor: 'pointer', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}
+                    className="bg-white text-gray-700 border border-gray-300 px-4 py-2 rounded font-medium text-sm hover:bg-gray-50"
                   >
-                    <TrashIcon /> Hủy phiếu
+                    🗑 Hủy
                   </button>
                 </>
               )}
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px', fontSize: '13px' }}>
-              <div style={{ display: 'flex', gap: '24px' }}>
-                <span style={{ color: '#6B7280' }}>Tổng lệch tăng:</span>
-                <span style={{ color: '#15803D', fontWeight: 600 }}>{check.total_increase}</span>
+            <div className="flex flex-col gap-1 text-right text-sm">
+              <div className="flex justify-between gap-6">
+                <span className="text-gray-500">Tổng thực tế:</span>
+                <span className="font-bold">{check.actual_quantity}</span>
               </div>
-              <div style={{ display: 'flex', gap: '24px' }}>
-                <span style={{ color: '#6B7280' }}>Tổng lệch giảm:</span>
-                <span style={{ color: '#B91C1C', fontWeight: 600 }}>{check.total_decrease}</span>
+              <div className="flex justify-between gap-6">
+                <span className="text-gray-500">Tổng lệch tăng:</span>
+                <span className="font-bold text-green-600">{check.total_increase}</span>
               </div>
-              <div style={{ display: 'flex', gap: '24px', paddingTop: '4px', borderTop: '1px solid #E5E7EB', marginTop: '4px' }}>
-                <span style={{ color: '#111827', fontWeight: 600 }}>Tổng chênh lệch:</span>
-                <span style={{ color: '#0055AA', fontWeight: 700 }}>{check.total_increase - check.total_decrease}</span>
+              <div className="flex justify-between gap-6">
+                <span className="text-gray-500">Tổng lệch giảm:</span>
+                <span className="font-bold text-red-600">{check.total_decrease}</span>
+              </div>
+              <div className="flex justify-between gap-6 pt-2 mt-1 border-t border-gray-200 text-[#0055AA] font-bold text-lg">
+                <span>Tổng chênh lệch:</span>
+                <span>{check.total_increase - check.total_decrease}</span>
               </div>
             </div>
           </div>
@@ -152,161 +162,217 @@ const ExpandedDetail: React.FC<{
   );
 };
 
-// ─── Main Component ────────────────────────────────────────
-interface InventoryCheckListProps {
-  onOpenForm?: (checkId: string) => void;
-  onCreateNew?: () => void;
-}
-
-export const InventoryCheckList: React.FC<InventoryCheckListProps> = ({ onOpenForm, onCreateNew }) => {
+export const InventoryCheckList: React.FC<{
+  currentUser: string;
+  onOpenForm: (id?: string) => void
+}> = ({ currentUser, onOpenForm }) => {
   const [checks, setChecks] = useState<InventoryCheck[]>([]);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState<InventoryFilter>({
-    status: undefined,
-    searchCode: '',
-  });
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<Record<InventoryStatus, boolean>>({
     'Phiếu tạm': true,
     'Đã cân bằng': true,
-    'Đã hủy': false,
+    'Đã hủy': false
   });
+  const [searchCode, setSearchCode] = useState('');
+  const [creatorFilter, setCreatorFilter] = useState('');
+
+  // FIX: datePreset là state thực sự điều khiển filter — không chỉ UI radio
+  const [datePreset, setDatePreset] = useState<'all' | 'today' | 'this_week'>('all');
 
   const loadChecks = useCallback(async () => {
     setLoading(true);
-    const activeStatuses = (Object.keys(statusFilter) as InventoryStatus[]).filter((s) => statusFilter[s]);
     try {
-      const all = await Promise.all(
-        activeStatuses.length > 0
-          ? activeStatuses.map((s) => repo.getAllChecks({ ...filters, status: s }))
-          : [repo.getAllChecks(filters)]
-      );
-      const merged = all.flat().sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-      setChecks(merged);
+      // FIX: Tính date range từ preset rồi truyền vào filter
+      const dateRange = getDateRange(datePreset);
+      const activeStatuses = (Object.keys(statusFilter) as InventoryStatus[]).filter(s => statusFilter[s]);
+
+      const filter: InventoryFilter = {
+        searchCode: searchCode || undefined,
+        creator: creatorFilter || undefined,
+        // FIX: truyền createdFrom/createdTo thực sự (trước đây không có)
+        createdFrom: dateRange.from,
+        createdTo: dateRange.to,
+      };
+
+      // FIX: Lấy tất cả rồi filter status client-side (vì status filter có thể nhiều giá trị)
+      const data = await repo.getAllChecks(filter);
+      setChecks(data.filter(c => activeStatuses.includes(c.status)));
+    } catch (err) {
+      console.error(err);
     } finally {
       setLoading(false);
     }
-  }, [filters, statusFilter]);
+  }, [statusFilter, searchCode, creatorFilter, datePreset]);
 
   useEffect(() => { loadChecks(); }, [loadChecks]);
 
-  const handleCancel = async (id: string) => {
-    if (!window.confirm('Hủy phiếu kiểm kho này?')) return;
-    await repo.cancelCheck(id);
-    loadChecks();
+  const handleCancelCheck = async (id: string) => {
+    if (confirm('Bạn có chắc chắn muốn hủy phiếu kiểm kho này?')) {
+      await repo.cancelCheck(id);
+      loadChecks();
+    }
   };
 
-  const toggleStatus = (status: InventoryStatus) => {
-    setStatusFilter((prev) => ({ ...prev, [status]: !prev[status] }));
+  const handleNewCheck = async () => {
+    try {
+      setLoading(true);
+      const newCheck = await repo.createCheck({
+        creator: currentUser,
+        notes: 'Phiếu kiểm kho mới'
+      });
+      onOpenForm(newCheck.id);
+    } catch (err: any) {
+      console.error('Lỗi tạo phiếu:', err);
+      alert('Không thể tạo phiếu mới: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <div style={{ display: 'flex', height: '100vh', backgroundColor: '#F3F4F6', fontFamily: 'system-ui, sans-serif' }}>
-      {/* Sidebar */}
-      <aside style={{ width: '240px', backgroundColor: '#fff', borderRight: '1px solid #E5E7EB', padding: '20px 16px', overflowY: 'auto', flexShrink: 0 }}>
-        <h2 style={{ fontSize: '16px', fontWeight: 700, color: '#111827', marginBottom: '24px' }}>Phiếu kiểm kho</h2>
+    <div className="flex flex-1 overflow-hidden bg-[#F0F1F3]">
+      {/* Sidebar Filters */}
+      <aside className="w-64 bg-white border-r border-gray-200 p-4 flex-shrink-0 overflow-y-auto">
+        <h2 className="text-lg font-bold text-gray-800 mb-6">Phiếu kiểm kho</h2>
 
-        <div style={{ marginBottom: '24px' }}>
-          <div style={{ fontSize: '12px', fontWeight: 600, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '10px' }}>Trạng thái</div>
-          {(Object.keys(statusFilter) as InventoryStatus[]).map((status) => (
-            <label key={status} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', cursor: 'pointer', fontSize: '14px', color: '#374151' }}>
-              <input
-                type="checkbox"
-                checked={statusFilter[status]}
-                onChange={() => toggleStatus(status)}
-                style={{ width: '15px', height: '15px', accentColor: '#0055AA' }}
-              />
-              {status}
-            </label>
-          ))}
+        {/* FIX: Ngày tạo — radio thực sự gọi setDatePreset để trigger reload */}
+        <div className="mb-6">
+          <h3 className="text-sm font-semibold text-gray-700 mb-3">Ngày tạo</h3>
+          <div className="space-y-2">
+            {([
+              { value: 'all', label: 'Tất cả' },
+              { value: 'today', label: 'Hôm nay' },
+              { value: 'this_week', label: 'Tuần này' },
+            ] as const).map(opt => (
+              <label key={opt.value} className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+                <input
+                  type="radio"
+                  name="date-filter"
+                  value={opt.value}
+                  checked={datePreset === opt.value}
+                  onChange={() => setDatePreset(opt.value)}
+                  className="w-4 h-4 accent-[#0055AA]"
+                />
+                {opt.label}
+                {datePreset === opt.value && opt.value !== 'all' && (
+                  <span className="text-xs text-[#0055AA] font-semibold">✓</span>
+                )}
+              </label>
+            ))}
+          </div>
         </div>
 
+        <div className="mb-6">
+          <h3 className="text-sm font-semibold text-gray-700 mb-3">Trạng thái</h3>
+          <div className="space-y-2">
+            {(Object.keys(statusFilter) as InventoryStatus[]).map(s => (
+              <label key={s} className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={statusFilter[s]}
+                  onChange={() => setStatusFilter(prev => ({ ...prev, [s]: !prev[s] }))}
+                  className="w-4 h-4 accent-[#0055AA]"
+                /> {s}
+              </label>
+            ))}
+          </div>
+        </div>
+
+        {/* FIX: Người tạo — input thực sự gắn state creatorFilter */}
         <div>
-          <div style={{ fontSize: '12px', fontWeight: 600, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '10px' }}>Người tạo</div>
+          <h3 className="text-sm font-semibold text-gray-700 mb-3">Người tạo</h3>
           <input
-            type="text"
-            placeholder="Tìm người tạo..."
-            value={filters.creator || ''}
-            onChange={(e) => setFilters((f) => ({ ...f, creator: e.target.value }))}
-            style={{ width: '100%', padding: '7px 10px', border: '1px solid #D1D5DB', borderRadius: '4px', fontSize: '13px', boxSizing: 'border-box' }}
+            className="w-full p-2 bg-gray-50 border border-gray-300 rounded text-sm outline-none focus:border-[#0055AA]"
+            placeholder="Nhập tên người tạo"
+            value={creatorFilter}
+            onChange={e => setCreatorFilter(e.target.value)}
           />
         </div>
       </aside>
 
-      {/* Main */}
-      <main style={{ flex: 1, padding: '20px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      {/* Main Content */}
+      <div className="flex-1 p-4 overflow-y-auto flex flex-col gap-4">
         {/* Toolbar */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ position: 'relative', width: '280px' }}>
-            <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#9CA3AF' }}>
-              <SearchIcon />
-            </span>
+        <div className="flex justify-between items-center">
+          <div className="flex items-center bg-white border border-gray-300 rounded w-80 h-[38px] px-3 focus-within:border-[#0055AA]">
             <input
-              type="text"
-              placeholder="Tìm theo mã phiếu kiểm..."
-              value={filters.searchCode || ''}
-              onChange={(e) => setFilters((f) => ({ ...f, searchCode: e.target.value }))}
-              style={{ padding: '8px 14px 8px 32px', border: '1px solid #D1D5DB', borderRadius: '4px', fontSize: '14px', width: '100%', backgroundColor: '#fff', boxSizing: 'border-box' }}
+              className="flex-1 border-none outline-none text-sm p-0 bg-transparent"
+              placeholder="Theo mã phiếu kiểm"
+              value={searchCode}
+              onChange={e => setSearchCode(e.target.value)}
             />
+            <span className="pl-2 border-l border-gray-200 text-gray-400">
+              <SettingsIcon />
+            </span>
           </div>
-          <button
-            onClick={onCreateNew}
-            style={{ padding: '8px 18px', backgroundColor: '#0055AA', color: '#fff', border: 'none', borderRadius: '4px', fontWeight: 600, cursor: 'pointer', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}
-          >
-            <PlusIcon /> Tạo phiếu kiểm
-          </button>
+          {/* FIX: Hiển thị badge filter đang active */}
+          <div className="flex items-center gap-2">
+            {datePreset !== 'all' && (
+              <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full font-semibold">
+                {datePreset === 'today' ? 'Hôm nay' : 'Tuần này'}
+                <button onClick={() => setDatePreset('all')} className="ml-1 hover:text-red-500">×</button>
+              </span>
+            )}
+            <button
+              onClick={handleNewCheck}
+              className="bg-[#0055AA] text-white px-4 py-2 rounded font-bold text-sm hover:bg-[#004488] whitespace-nowrap flex items-center gap-2"
+            >
+              <PlusIcon /> Kiểm kho
+            </button>
+          </div>
         </div>
 
-        {/* Table */}
-        <div style={{ backgroundColor: '#fff', borderRadius: '6px', border: '1px solid #E5E7EB', overflow: 'hidden' }}>
-          {loading ? (
-            <div style={{ padding: '40px', textAlign: 'center', color: '#6B7280' }}>Đang tải...</div>
-          ) : (
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
-              <thead style={{ backgroundColor: '#F9FAFB', borderBottom: '2px solid #E5E7EB' }}>
-                <tr>
-                  {['Mã kiểm kho', 'Ngày tạo', 'Người tạo', 'Ngày cân bằng', 'SL thực tế', 'Lệch tăng', 'Lệch giảm', 'Trạng thái'].map((h) => (
-                    <th key={h} style={{ padding: '10px 12px', textAlign: ['SL thực tế', 'Lệch tăng', 'Lệch giảm'].includes(h) ? 'right' : 'left', fontWeight: 600, color: '#374151', fontSize: '12px', whiteSpace: 'nowrap' }}>
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {checks.length === 0 && (
-                  <tr>
-                    <td colSpan={8} style={{ padding: '32px', textAlign: 'center', color: '#9CA3AF' }}>Không có phiếu nào</td>
+        {/* Data Table */}
+        <div className="bg-white border border-gray-200 rounded shadow-sm overflow-hidden">
+          <table className="w-full text-left text-xs border-collapse">
+            <thead className="bg-gray-50 border-b border-gray-200 uppercase text-gray-500 font-bold">
+              <tr>
+                <th className="p-3 w-10"><input type="checkbox" className="accent-[#0055AA]" /></th>
+                <th className="p-3">Mã kiểm kho</th>
+                <th className="p-3">Ngày tạo</th>
+                <th className="p-3">Ngày cân bằng</th>
+                <th className="p-3 text-right">SL thực tế</th>
+                <th className="p-3 text-right">Tổng chênh lệch</th>
+                <th className="p-3 text-right">Lệch tăng</th>
+                <th className="p-3 text-right">Lệch giảm</th>
+                <th className="p-3">Trạng thái</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr><td colSpan={9} className="p-8 text-center text-gray-400 text-base">Đang tải danh sách phiếu kiểm kho...</td></tr>
+              ) : checks.length === 0 ? (
+                <tr><td colSpan={9} className="p-8 text-center text-gray-400 text-base">Không tìm thấy phiếu nào</td></tr>
+              ) : checks.map(c => (
+                <React.Fragment key={c.id}>
+                  <tr
+                    className={`cursor-pointer hover:bg-gray-50 border-b border-gray-100 ${expandedId === c.id ? 'bg-blue-50/30' : ''}`}
+                    onClick={() => setExpandedId(expandedId === c.id ? null : c.id)}
+                  >
+                    <td className="p-3"><input type="checkbox" className="accent-[#0055AA]" onClick={e => e.stopPropagation()} /></td>
+                    <td className="p-3 text-[#0055AA] font-bold">{c.code}</td>
+                    <td className="p-3 text-gray-600">{new Date(c.created_at).toLocaleDateString('vi-VN')}</td>
+                    <td className="p-3 text-gray-600">{c.balanced_at ? new Date(c.balanced_at).toLocaleDateString('vi-VN') : '—'}</td>
+                    <td className="p-3 text-right text-gray-800">{c.actual_quantity}</td>
+                    <td className="p-3 text-right font-semibold text-gray-800">{(c.total_increase - c.total_decrease).toLocaleString()}đ</td>
+                    <td className="p-3 text-right text-green-600 font-bold">{c.total_increase}</td>
+                    <td className="p-3 text-right text-red-600 font-bold">{c.total_decrease}</td>
+                    <td className="p-3"><StatusBadge status={c.status} /></td>
                   </tr>
-                )}
-                {checks.map((check) => (
-                  <React.Fragment key={check.id}>
-                    <tr
-                      onClick={() => setExpandedId(expandedId === check.id ? null : check.id)}
-                      style={{ borderBottom: '1px solid #F3F4F6', cursor: 'pointer', backgroundColor: expandedId === check.id ? '#EFF6FF' : '#fff', transition: 'background 0.1s' }}
-                    >
-                      <td style={{ padding: '10px 12px', color: '#0055AA', fontWeight: 600 }}>{check.code}</td>
-                      <td style={{ padding: '10px 12px', color: '#374151' }}>{new Date(check.created_at).toLocaleDateString('vi-VN')}</td>
-                      <td style={{ padding: '10px 12px', color: '#374151' }}>{check.creator}</td>
-                      <td style={{ padding: '10px 12px', color: '#374151' }}>{check.balanced_at ? new Date(check.balanced_at).toLocaleDateString('vi-VN') : '—'}</td>
-                      <td style={{ padding: '10px 12px', textAlign: 'right', color: '#374151' }}>{check.actual_quantity}</td>
-                      <td style={{ padding: '10px 12px', textAlign: 'right', color: '#15803D', fontWeight: 600 }}>{check.total_increase || 0}</td>
-                      <td style={{ padding: '10px 12px', textAlign: 'right', color: '#B91C1C', fontWeight: 600 }}>{check.total_decrease || 0}</td>
-                      <td style={{ padding: '10px 12px' }}><StatusBadge status={check.status} /></td>
-                    </tr>
-                    {expandedId === check.id && (
-                      <ExpandedDetail
-                        check={check}
-                        onCancel={handleCancel}
-                        onOpenForm={(id) => onOpenForm?.(id)}
-                      />
-                    )}
-                  </React.Fragment>
-                ))}
-              </tbody>
-            </table>
-          )}
+                  {expandedId === c.id && (
+                    <ExpandedDetail
+                      check={c}
+                      onOpenForm={onOpenForm}
+                      onCancel={handleCancelCheck}
+                    />
+                  )}
+                </React.Fragment>
+              ))}
+            </tbody>
+          </table>
         </div>
-      </main>
+      </div>
     </div>
   );
 };

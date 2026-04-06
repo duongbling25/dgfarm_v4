@@ -29,6 +29,8 @@ export class SupabaseProductRepository implements IProductRepository {
       note:           row.note ?? null,
       image_url:      row.image_url ?? null,
       expected_order: row.expected_order != null ? Number(row.expected_order) : null,
+      unit:           row.unit ?? null,
+      barcode:        row.barcode ?? null,
       created_at:     row.created_at,
     }
   }
@@ -112,6 +114,7 @@ export class SupabaseProductRepository implements IProductRepository {
       note:           data.note ?? null,
       image_url:      data.image_url ?? null,
       expected_order: data.expected_order ?? null,
+      unit:           data.unit ?? null,
       created_at:     new Date().toISOString(),
     })
     if (error) throw new Error(error.message)

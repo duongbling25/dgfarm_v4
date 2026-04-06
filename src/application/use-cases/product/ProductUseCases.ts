@@ -53,6 +53,7 @@ export async function addProductUseCase(form: AddProductDTO) {
     image_url: form.image_url || null,
     expected_order: form.expected_order ?? null,
     unit: (form as any).unit ?? null,
+    barcode: (form as any).barcode ?? null,
   })
 }
 

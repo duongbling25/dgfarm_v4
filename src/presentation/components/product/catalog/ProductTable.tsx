@@ -357,7 +357,7 @@ function ProductModal({ initial, onClose, onSaved }: {
           onSaved({ ...initial, ...payload })
         } else {
           await addProductUseCase(payload)
-          onSaved({ id: '', code: '', name: form.name, created_at: '', supplier_name: null, ...payload } as Product)
+          onSaved({ id: '', code: '', name: form.name, created_at: '', supplier_name: null, barcode: (form as any).barcode ?? '', unit: (form as any).unit ?? '', ...payload } as Product)
         }
         onClose()
       } catch (e: any) { setErr(e.message) }

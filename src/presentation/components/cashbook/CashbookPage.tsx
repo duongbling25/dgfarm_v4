@@ -1,7 +1,7 @@
 // src/presentation/components/cashbook/CashbookPage.tsx
 'use client'
 
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import {
   useDanhSachPhieu,
   usePhieuActions,
@@ -20,25 +20,26 @@ const fmtDate = (s: string) =>
   })
 
 const TABS: { key: CashbookLoaiTaiKhoan | 'tong'; label: string; icon: string }[] = [
-  { key: 'tien_mat',    label: 'Tiền mặt',   icon: '💵' },
-  { key: 'ngan_hang',   label: 'Ngân hàng',  icon: '🏦' },
-  { key: 'vi_dien_tu',  label: 'Ví điện tử', icon: '💳' },
-  { key: 'tong',        label: 'Tổng quỹ',   icon: '📊' },
+  { key: 'tien_mat', label: 'Tiền mặt', icon: '💵' },
+  { key: 'ngan_hang', label: 'Ngân hàng', icon: '🏦' },
+  { key: 'vi_dien_tu', label: 'Ví điện tử', icon: '💳' },
+  { key: 'tong', label: 'Tổng quỹ', icon: '📊' },
 ]
 
 const NHOM_OPTIONS = [
-  { value: 'khach_hang',    label: 'Khách hàng' },
-  { value: 'nha_cung_cap',  label: 'Nhà cung cấp' },
-  { value: 'nhan_vien',     label: 'Nhân viên' },
-  { value: 'khac',          label: 'Khác' },
+  { value: 'khach_hang', label: 'Khách hàng' },
+  { value: 'nha_cung_cap', label: 'Nhà cung cấp' },
+  { value: 'nhan_vien', label: 'Nhân viên' },
+  { value: 'khac', label: 'Khác' },
 ]
 
 // ── ModalLapPhieu ──────────────────────────────────────────────
 function ModalLapPhieu({
-  kieu, taiKhoanId, loaiList, onClose, onSave, saving,
+  kieu, taiKhoanId, taiKhoanTen, loaiList, onClose, onSave, saving,
 }: {
   kieu: 'thu' | 'chi'
   taiKhoanId: string
+  taiKhoanTen: string
   loaiList: LoaiThuChi[]
   onClose: () => void
   onSave: (data: LapPhieuDTO) => void
@@ -58,7 +59,9 @@ function ModalLapPhieu({
   const { doThem: themLoai, isPending: addingLoai } = useLoaiThuChi(kieu)
 
   const loaiFilt = loaiList.filter(l => l.kieu === kieu)
-  const color = kieu === 'thu' ? { bg: '#006E1C', light: '#D1FAE5', text: '#065F46' } : { bg: '#DC2626', light: '#FEE2E2', text: '#991B1B' }
+  const color = kieu === 'thu'
+    ? { bg: '#10B981', light: '#D1FAE5', text: '#065F46' }
+    : { bg: '#EF4444', light: '#FEE2E2', text: '#991B1B' }
 
   const handleSubmit = (printAfter = false) => {
     if (!form.loai_thu_chi_id) return alert('Vui lòng chọn loại ' + (kieu === 'thu' ? 'thu' : 'chi'))
@@ -83,7 +86,7 @@ function ModalLapPhieu({
         {/* Header */}
         <div style={{ background: color.bg, padding: '16px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h2 style={{ color: '#fff', fontWeight: 800, fontSize: 17, margin: 0 }}>
-            {kieu === 'thu' ? '+ Lập phiếu thu (tiền mặt)' : '− Lập phiếu chi (tiền mặt)'}
+            {kieu === 'thu' ? '+ Lập phiếu thu' : '− Lập phiếu chi'} — {taiKhoanTen}
           </h2>
           <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: '#fff', width: 28, height: 28, borderRadius: '50%', cursor: 'pointer', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
         </div>
@@ -137,7 +140,7 @@ function ModalLapPhieu({
             <label style={labelStyle}>Giá trị (VNĐ) *</label>
             <input value={form.gia_tri} placeholder="0"
               onChange={e => setForm(p => ({ ...p, gia_tri: e.target.value.replace(/[^0-9]/g, '') }))}
-              style={{ ...inputStyle, textAlign: 'right', fontSize: 18, fontWeight: 800, color: color.bg }} />
+              style={{ ...inputStyle, textAlign: 'right', fontSize: 20, fontWeight: 800, color: color.bg }} />
           </div>
           {/* Nhóm đối tượng */}
           <div>
@@ -204,13 +207,13 @@ function ModalTaiKhoan({
 }) {
   const [form, setForm] = useState<ThemTaiKhoanDTO>({
     ten_tai_khoan: existing?.ten_tai_khoan ?? '',
-    so_tai_khoan:  existing?.so_tai_khoan ?? null,
-    ngan_hang:     existing?.ngan_hang ?? null,
+    so_tai_khoan: existing?.so_tai_khoan ?? null,
+    ngan_hang: existing?.ngan_hang ?? null,
     chu_tai_khoan: existing?.chu_tai_khoan ?? null,
-    loai:          (existing?.loai as any) ?? 'ngan_hang',
-    la_mac_dinh:   existing?.la_mac_dinh ?? false,
-    so_du_dau_ky:  existing?.so_du_dau_ky ?? 0,
-    ghi_chu:       existing?.ghi_chu ?? null,
+    loai: (existing?.loai as any) ?? 'ngan_hang',
+    la_mac_dinh: existing?.la_mac_dinh ?? false,
+    so_du_dau_ky: existing?.so_du_dau_ky ?? 0,
+    ghi_chu: existing?.ghi_chu ?? null,
   })
 
   return (
@@ -262,7 +265,7 @@ function ModalConfirmHuy({ maPhieu, onClose, onConfirm, saving }: {
     <div style={{ position: 'fixed', inset: 0, zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.45)' }}>
       <div style={{ background: '#fff', borderRadius: 16, padding: 28, width: 360, boxShadow: '0 20px 60px rgba(0,0,0,0.2)', textAlign: 'center' }}>
         <div style={{ fontSize: 40, marginBottom: 12 }}>⚠️</div>
-        <h3 style={{ fontWeight: 800, fontSize: 16, color: '#111827', marginBottom: 8 }}>Xóa phiếu</h3>
+        <h3 style={{ fontWeight: 800, fontSize: 16, color: '#111827', marginBottom: 8 }}>Hủy phiếu</h3>
         <p style={{ fontSize: 14, color: '#6B7280', marginBottom: 24 }}>
           Bạn chắc chắn muốn hủy phiếu <strong style={{ color: '#111827' }}>{maPhieu}</strong>?
         </p>
@@ -286,24 +289,42 @@ export default function CashbookPage() {
   const [huyTarget, setHuyTarget] = useState<{ id: string; ma: string } | null>(null)
   const [expanded, setExpanded] = useState<string | null>(null)
 
-  const { list: taiKhoanList, tongQuy, loading: tkLoading, isPending: tkPending, error: tkError, refresh: refreshTK, doThem: doThemTK, doSua: doSuaTK, doXoa: doXoaTK } = useTaiKhoanQuy()
+  const {
+    list: taiKhoanList,
+    tongQuy,
+    loading: tkLoading,
+    isPending: tkPending,
+    error: tkError,
+    refresh: refreshTK,
+    doThem: doThemTK,
+    doSua: doSuaTK,
+    doXoa: doXoaTK,
+  } = useTaiKhoanQuy()
 
-  // tài khoản active dựa theo tab
+  // FIX: Tính activeTK từ taiKhoanList (loại tien_mat không cần tạo tài khoản, luôn dùng first match)
   const activeTK = useMemo(() => {
     if (activeTab === 'tong') return null
-    return taiKhoanList.find(t => t.loai === activeTab) ?? null
+    // Ưu tiên tài khoản mặc định, nếu không có thì lấy đầu tiên theo loại
+    const byLoai = taiKhoanList.filter(t => t.loai === activeTab)
+    return byLoai.find(t => t.la_mac_dinh) ?? byLoai[0] ?? null
   }, [activeTab, taiKhoanList])
 
-  const { result, loading, filter, setFilter, refresh } = useDanhSachPhieu({
-    tai_khoan_quy_id: activeTK?.id,
-  })
+  // FIX: Khởi tạo filter không có tai_khoan_quy_id, sau đó sync khi activeTK thay đổi
+  const { result, loading, filter, setFilter, refresh } = useDanhSachPhieu({})
 
-  // Khi đổi tab → reset filter + page
+  // FIX: Đồng bộ tai_khoan_quy_id vào filter sau khi taiKhoanList load xong
+  useEffect(() => {
+    setFilter(prev => ({
+      ...prev,
+      tai_khoan_quy_id: activeTK?.id ?? undefined,
+      page: 1,
+    }))
+  }, [activeTK?.id, activeTab])
+
+  // Đổi tab → chỉ set activeTab, useEffect trên sẽ cập nhật filter
   const changeTab = (tab: CashbookLoaiTaiKhoan | 'tong') => {
     setActiveTab(tab)
     setExpanded(null)
-    const tk = taiKhoanList.find(t => t.loai === tab)
-    setFilter({ page: 1, page_size: 20, tai_khoan_quy_id: tk?.id })
   }
 
   const { isPending: phieuPending, error: phieuError, doLapThu, doLapChi, doHuy } = usePhieuActions(() => {
@@ -311,11 +332,18 @@ export default function CashbookPage() {
   })
   const { list: loaiList } = useLoaiThuChi()
 
-  // Tổng quỹ active tab
+  // Tổng quỹ theo tab active
   const tongActive = useMemo(() => {
     if (activeTab === 'tong') {
+      if (tongQuy.length === 0) return null
       return tongQuy.reduce(
-        (acc, t) => ({ ...acc, so_du_dau_ky: acc.so_du_dau_ky + t.so_du_dau_ky, tong_thu: acc.tong_thu + t.tong_thu, tong_chi: acc.tong_chi + t.tong_chi, ton_quy: acc.ton_quy + t.ton_quy }),
+        (acc, t) => ({
+          ...acc,
+          so_du_dau_ky: acc.so_du_dau_ky + t.so_du_dau_ky,
+          tong_thu: acc.tong_thu + t.tong_thu,
+          tong_chi: acc.tong_chi + t.tong_chi,
+          ton_quy: acc.ton_quy + t.ton_quy,
+        }),
         { so_du_dau_ky: 0, tong_thu: 0, tong_chi: 0, ton_quy: 0 }
       )
     }
@@ -324,8 +352,14 @@ export default function CashbookPage() {
 
   const isSaving = phieuPending || tkPending
 
+  // FIX: Kiểm tra activeTK trước khi mở modal — không dùng alert() trình duyệt
+  const handleOpenModal = (type: 'thu' | 'chi') => {
+    if (!activeTK) return // nút đã disabled khi !activeTK
+    setModal(type)
+  }
+
   return (
-    <div style={{ display: 'flex', minHeight: 'calc(100vh - 96px)', background: '#F3F4F6' }}>
+    <div style={{ display: 'flex', minHeight: 'calc(100vh - 96px)', background: '#F8FAFC', fontFamily: "'Inter', 'Be Vietnam Pro', system-ui, sans-serif" }}>
 
       {/* ── Sidebar ── */}
       <aside style={{ width: 220, background: '#fff', borderRight: '1px solid #E5E7EB', display: 'flex', flexDirection: 'column', padding: '16px 12px', gap: 16, flexShrink: 0 }}>
@@ -359,18 +393,15 @@ export default function CashbookPage() {
         <div>
           <p style={{ fontSize: 11, fontWeight: 600, color: '#6B7280', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 }}>Thời gian</p>
           <input type="date" style={{ width: '100%', height: 32, border: '1px solid #E5E7EB', borderRadius: 6, fontSize: 11, padding: '0 8px', marginBottom: 6, outline: 'none', boxSizing: 'border-box' }}
-            onChange={e => setFilter(p => ({ ...p, tu_ngay: e.target.value, page: 1 }))} />
+            value={filter.tu_ngay ?? ''}
+            onChange={e => setFilter(p => ({ ...p, tu_ngay: e.target.value || undefined, page: 1 }))} />
           <input type="date" style={{ width: '100%', height: 32, border: '1px solid #E5E7EB', borderRadius: 6, fontSize: 11, padding: '0 8px', outline: 'none', boxSizing: 'border-box' }}
-            onChange={e => setFilter(p => ({ ...p, den_ngay: e.target.value, page: 1 }))} />
+            value={filter.den_ngay ?? ''}
+            onChange={e => setFilter(p => ({ ...p, den_ngay: e.target.value || undefined, page: 1 }))} />
         </div>
 
         {/* Bottom actions */}
         <div style={{ marginTop: 'auto', borderTop: '1px solid #F3F4F6', paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <button onClick={() => {}} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '8px 10px', background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 12, color: '#6B7280', borderRadius: 6, textAlign: 'left' }}
-            onMouseEnter={e => (e.currentTarget.style.background = '#F3F4F6')}
-            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-            📥 Xuất file Excel
-          </button>
           <button onClick={() => window.print()} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '8px 10px', background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 12, color: '#6B7280', borderRadius: 6, textAlign: 'left' }}
             onMouseEnter={e => (e.currentTarget.style.background = '#F3F4F6')}
             onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
@@ -386,12 +417,19 @@ export default function CashbookPage() {
         <div style={{ background: '#fff', borderBottom: '1px solid #E5E7EB', padding: '14px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
           <h1 style={{ fontSize: 20, fontWeight: 800, color: '#111827', margin: 0 }}>Sổ quỹ</h1>
           <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={() => { if (!activeTK) { alert('Vui lòng chọn tab Tiền mặt, Ngân hàng hoặc Ví điện tử để lập phiếu'); return; } setModal('thu') }}
-              style={{ ...btnStyle, background: '#006E1C', display: 'flex', alignItems: 'center', gap: 6 }}>
+            {/* FIX: Disable nút khi không có activeTK — không dùng alert() */}
+            <button
+              onClick={() => handleOpenModal('thu')}
+              disabled={!activeTK}
+              title={!activeTK ? 'Vui lòng chọn tab Tiền mặt, Ngân hàng hoặc Ví điện tử' : undefined}
+              style={{ ...btnStyle, background: activeTK ? '#006E1C' : '#9CA3AF', display: 'flex', alignItems: 'center', gap: 6, cursor: activeTK ? 'pointer' : 'not-allowed' }}>
               + Lập phiếu thu
             </button>
-            <button onClick={() => { if (!activeTK) { alert('Vui lòng chọn tab Tiền mặt, Ngân hàng hoặc Ví điện tử để lập phiếu'); return; } setModal('chi') }}
-              style={{ ...btnStyle, background: '#DC2626', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <button
+              onClick={() => handleOpenModal('chi')}
+              disabled={!activeTK}
+              title={!activeTK ? 'Vui lòng chọn tab Tiền mặt, Ngân hàng hoặc Ví điện tử' : undefined}
+              style={{ ...btnStyle, background: activeTK ? '#DC2626' : '#9CA3AF', display: 'flex', alignItems: 'center', gap: 6, cursor: activeTK ? 'pointer' : 'not-allowed' }}>
               − Lập phiếu chi
             </button>
             <button style={{ ...btnStyle, background: '#fff', color: '#253584', border: '1px solid #253584', display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -413,28 +451,44 @@ export default function CashbookPage() {
                 transition: 'all 0.15s',
               }}>
               {t.icon} {t.label}
+              {/* FIX: Hiển thị badge tên tài khoản nếu tab đó đã có TK */}
+              {t.key !== 'tong' && (() => {
+                const tk = taiKhoanList.find(x => x.loai === t.key)
+                return tk ? (
+                  <span style={{ fontSize: 10, background: '#EFF6FF', color: '#2563EB', borderRadius: 4, padding: '1px 5px', marginLeft: 2 }}>
+                    {tk.ten_tai_khoan}
+                  </span>
+                ) : null
+              })()}
             </button>
           ))}
-          {(activeTab === 'ngan_hang' || activeTab === 'vi_dien_tu') && (
+          {(activeTab === 'ngan_hang' || activeTab === 'vi_dien_tu' || activeTab === 'tien_mat') && (
             <button onClick={() => { setEditTK(null); setModal('tai-khoan') }}
               style={{ marginLeft: 'auto', padding: '6px 14px', border: '1px solid #253584', borderRadius: 6, background: '#fff', color: '#253584', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
-              + Thêm tài khoản
+              + {activeTK ? 'Sửa tài khoản' : 'Thêm tài khoản'}
             </button>
           )}
         </div>
+
+        {/* FIX: Hiển thị thông báo nếu tab chưa có tài khoản (thay vì chặn alert) */}
+        {activeTab !== 'tong' && !activeTK && !tkLoading && (
+          <div style={{ margin: '12px 24px', padding: '12px 16px', background: '#FEF9C3', border: '1px solid #FDE047', borderRadius: 8, fontSize: 13, color: '#854D0E', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>⚠️ Chưa có tài khoản quỹ cho loại <strong>{TABS.find(t => t.key === activeTab)?.label}</strong>. Bấm "Thêm tài khoản" để tạo mới.</span>
+          </div>
+        )}
 
         {/* Summary cards */}
         {tongActive && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, padding: '14px 24px', background: '#F9FAFB', borderBottom: '1px solid #E5E7EB', flexShrink: 0 }}>
             {[
-              { label: 'Quỹ đầu kỳ',  value: tongActive.so_du_dau_ky, color: '#1D4ED8', border: '#BFDBFE' },
-              { label: 'Tổng thu',     value: tongActive.tong_thu,     color: '#006E1C', border: '#A7F3D0' },
-              { label: 'Tổng chi',     value: -tongActive.tong_chi,    color: '#DC2626', border: '#FECACA' },
-              { label: 'Tồn quỹ',      value: tongActive.ton_quy,      color: tongActive.ton_quy >= 0 ? '#111827' : '#DC2626', border: '#E5E7EB', bold: true },
+              { label: 'Quỹ đầu kỳ', value: tongActive.so_du_dau_ky, color: '#2563EB', border: '#DBEAFE' },
+              { label: 'Tổng thu', value: tongActive.tong_thu, color: '#10B981', border: '#D1FAE5' },
+              { label: 'Tổng chi', value: tongActive.tong_chi, color: '#EF4444', border: '#FEE2E2' },
+              { label: 'Tồn quỹ', value: tongActive.ton_quy, color: tongActive.ton_quy >= 0 ? '#1E293B' : '#EF4444', border: '#E2E8F0', bold: true },
             ].map(c => (
-              <div key={c.label} style={{ background: '#fff', borderRadius: 10, padding: '12px 16px', border: `1px solid ${c.border}`, boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
-                <p style={{ fontSize: 10, color: '#6B7280', textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 600, margin: '0 0 4px' }}>{c.label}</p>
-                <p style={{ fontSize: 20, fontWeight: c.bold ? 900 : 700, color: c.color, margin: 0, fontVariantNumeric: 'tabular-nums' }}>
+              <div key={c.label} style={{ background: '#fff', borderRadius: 12, padding: '16px 20px', border: `1px solid ${c.border}`, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
+                <p style={{ fontSize: 11, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600, margin: '0 0 6px' }}>{c.label}</p>
+                <p style={{ fontSize: 22, fontWeight: c.bold ? 900 : 700, color: c.color, margin: 0, fontVariantNumeric: 'tabular-nums' }}>
                   {fmt(c.value)} ₫
                 </p>
               </div>
@@ -447,9 +501,9 @@ export default function CashbookPage() {
           <div style={{ background: '#fff', borderRadius: 12, border: '1px solid #E5E7EB', overflow: 'hidden' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
-                <tr style={{ background: '#F9FAFB', borderBottom: '1px solid #E5E7EB' }}>
+                <tr style={{ background: '#F8FAFC', borderBottom: '1.5px solid #E2E8F0' }}>
                   {['Mã phiếu', 'Thời gian', 'Loại thu chi', 'Người nộp/nhận', 'Giá trị', 'Tồn quỹ', ''].map(h => (
-                    <th key={h} style={{ padding: '11px 14px', textAlign: h === 'Giá trị' || h === 'Tồn quỹ' ? 'right' : 'left', fontSize: 11, fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', letterSpacing: 0.5, whiteSpace: 'nowrap' }}>
+                    <th key={h} style={{ padding: '14px 16px', textAlign: h === 'Giá trị' || h === 'Tồn quỹ' ? 'right' : 'left', fontSize: 12, fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap' }}>
                       {h}
                     </th>
                   ))}
@@ -485,7 +539,7 @@ export default function CashbookPage() {
                         <td style={{ padding: '12px 14px', fontSize: 12, color: '#6B7280' }}>{fmtDate(p.thoi_gian)}</td>
                         <td style={{ padding: '12px 14px', fontSize: 13 }}>{loaiTen}</td>
                         <td style={{ padding: '12px 14px', fontSize: 13 }}>{p.ten_doi_tuong || '—'}</td>
-                        <td style={{ padding: '12px 14px', fontSize: 13, fontWeight: 700, textAlign: 'right', color: p.kieu === 'thu' ? '#006E1C' : '#DC2626', fontVariantNumeric: 'tabular-nums' }}>
+                        <td style={{ padding: '14px 16px', fontSize: 14, fontWeight: 700, textAlign: 'right', color: p.kieu === 'thu' ? '#10B981' : '#EF4444', fontVariantNumeric: 'tabular-nums' }}>
                           {p.kieu === 'chi' ? '−' : '+'}{fmt(p.gia_tri)} ₫
                         </td>
                         <td style={{ padding: '12px 14px', fontSize: 12, textAlign: 'right', color: '#6B7280', fontVariantNumeric: 'tabular-nums' }}>—</td>
@@ -497,13 +551,11 @@ export default function CashbookPage() {
                         </td>
                       </tr>
 
-                      {/* Expanded detail */}
                       {isExpanded && (
                         <tr>
                           <td colSpan={7} style={{ padding: 0, borderBottom: '2px solid #BFDBFE' }}>
                             <div style={{ background: '#EFF6FF', padding: '16px 24px' }}>
                               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 24 }}>
-                                {/* Col 1 */}
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                                   {[
                                     { label: 'Mã phiếu', val: p.ma_phieu, bold: true, color: '#253584' },
@@ -518,7 +570,6 @@ export default function CashbookPage() {
                                     </div>
                                   ))}
                                 </div>
-                                {/* Col 2 */}
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                                   {[
                                     { label: 'Chi nhánh', val: p.chi_nhanh || 'Trung tâm' },
@@ -532,35 +583,22 @@ export default function CashbookPage() {
                                     </div>
                                   ))}
                                 </div>
-                                {/* Col 3 - ghi chú */}
                                 <div>
-                                  <p style={{ fontSize: 11, color: '#9CA3AF', marginBottom: 6 }}>Ghi chú...</p>
+                                  <p style={{ fontSize: 11, color: '#9CA3AF', marginBottom: 6 }}>Ghi chú</p>
                                   <div style={{ background: '#fff', borderRadius: 8, padding: 10, fontSize: 13, color: '#374151', fontStyle: p.ghi_chu ? 'normal' : 'italic', minHeight: 60, border: '1px solid #BFDBFE' }}>
                                     {p.ghi_chu || 'Không có ghi chú'}
                                   </div>
                                 </div>
                               </div>
-                              {/* Actions */}
-                              <div style={{ marginTop: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                  {p.hach_toan_kd && (
-                                    <>
-                                      <span style={{ color: '#006E1C', fontSize: 14 }}>✓</span>
-                                      <span style={{ fontSize: 12, color: '#374151', fontStyle: 'italic' }}>Hạch toán vào kết quả hoạt động kinh doanh</span>
-                                    </>
-                                  )}
-                                </div>
-                                <div style={{ display: 'flex', gap: 8 }}>
-                                  <button style={{ ...btnStyle, background: '#253584', fontSize: 12 }}>↗ Mở phiếu</button>
-                                  <button onClick={() => window.print()} style={{ ...btnStyle, background: '#fff', color: '#374151', border: '1px solid #E5E7EB', fontSize: 12 }}>🖨 In</button>
-                                  {p.trang_thai === 'da_thanh_toan' && (
-                                    <button
-                                      onClick={e => { e.stopPropagation(); setHuyTarget({ id: p.id, ma: p.ma_phieu }) }}
-                                      style={{ ...btnStyle, background: '#FEF2F2', color: '#DC2626', border: '1px solid #FECACA', fontSize: 12 }}>
-                                      ✕ Hủy bỏ
-                                    </button>
-                                  )}
-                                </div>
+                              <div style={{ marginTop: 14, display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                                <button onClick={() => window.print()} style={{ ...btnStyle, background: '#fff', color: '#374151', border: '1px solid #E5E7EB', fontSize: 12 }}>🖨 In</button>
+                                {p.trang_thai === 'da_thanh_toan' && (
+                                  <button
+                                    onClick={e => { e.stopPropagation(); setHuyTarget({ id: p.id, ma: p.ma_phieu }) }}
+                                    style={{ ...btnStyle, background: '#FEF2F2', color: '#DC2626', border: '1px solid #FECACA', fontSize: 12 }}>
+                                    ✕ Hủy bỏ
+                                  </button>
+                                )}
                               </div>
                             </div>
                           </td>
@@ -597,7 +635,6 @@ export default function CashbookPage() {
             )}
           </div>
 
-          {/* Error display */}
           {(phieuError || tkError) && (
             <div style={{ marginTop: 12, padding: 12, background: '#FEE2E2', borderRadius: 8, fontSize: 13, color: '#991B1B' }}>
               ⚠️ {phieuError || tkError}
@@ -609,7 +646,10 @@ export default function CashbookPage() {
       {/* ── Modals ── */}
       {(modal === 'thu' || modal === 'chi') && activeTK && (
         <ModalLapPhieu
-          kieu={modal} taiKhoanId={activeTK.id} loaiList={loaiList}
+          kieu={modal}
+          taiKhoanId={activeTK.id}
+          taiKhoanTen={activeTK.ten_tai_khoan}
+          loaiList={loaiList}
           saving={isSaving}
           onClose={() => setModal(null)}
           onSave={(data) => {

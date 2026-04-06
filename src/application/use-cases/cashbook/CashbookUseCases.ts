@@ -45,12 +45,10 @@ export async function lapPhieuThu(form: LapPhieuDTO) {
     kieu: 'thu',
     ma_phieu,
     trang_thai: 'da_thanh_toan',
-    doi_tuong_id: null,
-    ma_chung_tu_goc: null,
-    chi_nhanh: null,
+
     nguoi_dung_tao: 'Admin',
     nhan_vien_tao: 'Admin',
-  })
+  } as any)
   revalidatePath('/so-quy')
   return result
 }
@@ -69,12 +67,10 @@ export async function lapPhieuChi(form: LapPhieuDTO) {
     kieu: 'chi',
     ma_phieu,
     trang_thai: 'da_thanh_toan',
-    doi_tuong_id: null,
-    ma_chung_tu_goc: null,
-    chi_nhanh: null,
+
     nguoi_dung_tao: 'Admin',
     nhan_vien_tao: 'Admin',
-  })
+  } as any)
   revalidatePath('/so-quy')
   return result
 }
@@ -142,7 +138,7 @@ export async function xuatCsvSoQuy(filter: CashbookFilterDTO): Promise<string> {
   const rows = result.data.map(p => [
     p.ma_phieu,
     new Date(p.thoi_gian).toLocaleString('vi-VN'),
-    (p.loai_thu_chi as any)?.ten ?? '',
+    (p as any).loai?.ten ?? '',
     p.ten_doi_tuong ?? '',
     p.kieu === 'thu' ? p.gia_tri : -p.gia_tri,
     p.trang_thai === 'da_thanh_toan' ? 'Đã thanh toán' : 'Đã hủy',

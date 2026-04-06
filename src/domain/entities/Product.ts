@@ -21,6 +21,8 @@ export interface Product {
   note: string | null
   image_url: string | null
   expected_order: number | null
+  unit: string | null
+  barcode: string | null
   created_at: string
 }
 

@@ -27,52 +27,50 @@ export interface AdjustStockResult {
 
 export class AdjustStockUseCase {
   private inventoryRepo: InventoryRepository;
-
-  constructor() {
-    this.inventoryRepo = new InventoryRepository();
+ 
+  constructor(inventoryRepo?: InventoryRepository) {
+    this.inventoryRepo = inventoryRepo || new InventoryRepository();
   }
-
+ 
   async execute(input: AdjustStockInputDTO): Promise<AdjustStockResult> {
     // Bước 1: Validate đầu vào
     const validationError = validateAdjustStockInput(input);
     if (validationError) {
       return { success: false, totalIncrease: 0, totalDecrease: 0, totalDiffValue: 0, error: validationError };
     }
-
-    // Bước 2: UseCase tự tính lại các con số (không tin UI tính)
-    // Đây là logic kinh doanh - chỉ có UseCase mới được tính
+ 
+    // Bước 2: UseCase tự tính lại các con số (đảm bảo tính chính xác cho DB)
     const recalculatedItems = input.items.map((item) => {
       const diff_quantity = item.actual_quantity - item.stock_quantity;
       const diff_value = diff_quantity * item.sell_price;
       return { ...item, diff_quantity, diff_value };
     });
-
+ 
     // Bước 3: Tổng hợp các chỉ số chênh lệch
     let totalIncrease = 0;
     let totalDecrease = 0;
     let totalDiffValue = 0;
-
+ 
     recalculatedItems.forEach((item) => {
       if (item.diff_quantity > 0) totalIncrease += item.diff_quantity;
       else if (item.diff_quantity < 0) totalDecrease += Math.abs(item.diff_quantity);
       totalDiffValue += item.diff_value;
     });
-
-    // Bước 4: Gọi Repository để thực thi (giao cho Infrastructure xử lý DB)
+ 
+    // Bước 4: Gọi Repository để thực thi Giao dịch nguyên tử (Atomic Transaction)
+    // Thay vì loop từng item gây chậm và rủi ro data rác, ta gọi 1 RPC duy nhất.
     try {
-      // 4a. Cập nhật từng sản phẩm trong bảng products và inventory_check_items
-      await this.inventoryRepo.balanceItems(recalculatedItems);
-
-      // 4b. Cập nhật tổng hợp và trạng thái phiếu kiểm kho
-      await this.inventoryRepo.completeCheck(input.inventory_check_id, {
+      await this.inventoryRepo.performAtomicAdjustment({
+        inventory_check_id: input.inventory_check_id,
         balanced_by: input.balanced_by,
+        items: recalculatedItems,
         total_increase: totalIncrease,
         total_decrease: totalDecrease,
       });
-
+ 
       return { success: true, totalIncrease, totalDecrease, totalDiffValue };
     } catch (error: any) {
-      console.error('[AdjustStockUseCase] Lỗi cân bằng kho:', error);
+      console.error('[AdjustStockUseCase] Lỗi cân bằng kho (Atomic):', error);
       return {
         success: false,
         totalIncrease: 0,
@@ -82,4 +80,4 @@ export class AdjustStockUseCase {
       };
     }
   }
-}
+}

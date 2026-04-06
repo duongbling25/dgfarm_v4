@@ -32,6 +32,7 @@ export interface InventoryItem {
   product_id: string;
   product_name: string;
   unit: string;
+  barcode: string | null;
   stock_quantity: number;
   actual_quantity: number;
   diff_quantity: number;   // = actual_quantity - stock_quantity

@@ -33,8 +33,8 @@ const IcPin = () => (
 export default function ProductCard({ product, onClick, mode = 'storefront' }: ProductCardProps) {
   const { addItem, openCart } = useCart()
   const stockStatus = getStockStatus(product)
-  const outOfStock  = stockStatus === 'out_of_stock'
-  const stockLow    = stockStatus === 'low_stock'
+const outOfStock = stockStatus === 'out_of_stock'
+const stockLow   = stockStatus === 'below_min'
 
   function handleAddToCart(e: React.MouseEvent) {
     e.stopPropagation()

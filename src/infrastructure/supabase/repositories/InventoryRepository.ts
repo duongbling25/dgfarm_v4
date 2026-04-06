@@ -93,7 +93,7 @@ export class InventoryRepository {
       const newStock = item.stock_quantity + item.diff_quantity;
       const { error: productError } = await this.supabase
         .from('products')
-        .update({ stock: newStock, updated_at: new Date().toISOString() })
+        .update({ stock: newStock })
         .eq('id', item.product_id);
       if (productError) throw new Error(`Cập nhật stock sản phẩm ${item.product_id} thất bại: ${productError.message}`);
 
@@ -127,6 +127,79 @@ export class InventoryRepository {
       })
       .eq('id', id);
     if (error) throw new Error(`Hoàn tất phiếu thất bại: ${error.message}`);
+  }
+
+  async performAtomicAdjustment(data: {
+    inventory_check_id: string;
+    balanced_by: string;
+    items: any[];
+    total_increase: number;
+    total_decrease: number;
+  }): Promise<void> {
+    // 1. Chuẩn bị payload cho RPC - ánh xạ sang đúng schema SQL
+    const payload = {
+      p_inventory_check_id: data.inventory_check_id,
+      p_balanced_by: data.balanced_by,
+      p_items: data.items.map(item => ({
+        id:              item.id,              // UUID của inventory_check_items
+        product_id:      item.product_id,      // TEXT (Mã SP)
+        actual_quantity: Math.max(0, item.actual_quantity), // Đảm bảo không âm
+        diff_quantity:   item.diff_quantity,   // Có thể âm
+        diff_value:      item.diff_value       // Có thể âm (BIGINT)
+      })),
+      p_total_increase: data.total_increase,
+      p_total_decrease: data.total_decrease,
+    };
+
+    const { error } = await this.supabase.rpc('adjust_stock_atomic', payload);
+
+    if (error) {
+      console.error('[InventoryRepository] RPC Error:', error);
+      // Ném lỗi cụ thể từ Database (Triggers/Functions) để UI bắt được
+      throw new Error(error.message || 'Lỗi cân bằng kho hệ thống');
+    }
+  }
+
+  async searchProducts(query: string): Promise<any[]> {
+    if (!query || query.trim().length < 2) return [];
+    
+    // Use double quotes for values in .or() to handle spaces and special characters safely in PostgREST
+    const safeQuery = `%${query.trim()}%`;
+    
+    try {
+      // First try with barcode
+      const { data, error } = await this.supabase
+        .from('products')
+        .select('*')
+        .or(`id.ilike.${safeQuery},name.ilike.${safeQuery},barcode.ilike.${safeQuery}`)
+        .limit(10);
+        
+      if (error) {
+        // If it's a network error (Failed to fetch), don't bother retrying
+        if (error.message?.includes('fetch')) {
+          console.error('[InventoryRepository] Network error during search:', error.message);
+          return [];
+        }
+
+        // If barcode column is missing (PGRST204 or similar), retry without it
+        const { data: retryData, error: retryError } = await this.supabase
+          .from('products')
+          .select('*')
+          .or(`id.ilike.${safeQuery},name.ilike.${safeQuery}`)
+          .limit(10);
+
+        if (retryError) {
+          console.error('[InventoryRepository] Search retry error:', retryError.message, retryError.details);
+          return [];
+        }
+        return retryData || [];
+      }
+      return data || [];
+    } catch (err: any) {
+      // Catch unexpected exceptions (like TypeError: Failed to fetch if not caught by supabase-js)
+      console.error('[InventoryRepository] Unexpected search exception:', err.message || err);
+      return [];
+    }
   }
 
   async cancelCheck(id: string): Promise<void> {

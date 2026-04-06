@@ -19,6 +19,8 @@ export interface AddProductDTO {
   note?: string
   image_url?: string
   expected_order?: number
+  unit?: string
+  barcode?: string
 }
 
 export interface UpdateProductDTO {
@@ -38,6 +40,8 @@ export interface UpdateProductDTO {
   note?: string | null
   image_url?: string | null
   expected_order?: number | null
+  unit?: string | null
+  barcode?: string | null
 }
 
 export interface ProductFiltersDTO {
