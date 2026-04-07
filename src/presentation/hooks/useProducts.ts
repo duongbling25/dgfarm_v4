@@ -33,7 +33,7 @@ export function useProducts(initialProducts: Product[]) {
       try {
         await updateProductUseCase(id, form)
         setProducts(prev =>
-          prev.map(p => p.id === id ? { ...p, ...form } : p)
+          prev.map(p => p.id === id ? { ...p, ...form } as Product : p)
         )
         onSuccess?.()
       } catch (e: any) {

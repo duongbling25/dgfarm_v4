@@ -131,6 +131,14 @@ export async function xoaTaiKhoanQuy(id: string) {
   revalidatePath('/so-quy')
 }
 
+export async function getTongQuyTheoKy(
+  accountIds: string[],
+  tu_ngay?: string,
+  den_ngay?: string,
+) {
+  return getTaiKhoanQuyRepository().getTongQuyTheoKy(accountIds, tu_ngay, den_ngay)
+}
+
 // ── Xuất CSV ───────────────────────────────────────────────────
 export async function xuatCsvSoQuy(filter: CashbookFilterDTO): Promise<string> {
   const result = await getPhieuThuChiRepository().findAll({ ...filter, page: 1, page_size: 10000 })

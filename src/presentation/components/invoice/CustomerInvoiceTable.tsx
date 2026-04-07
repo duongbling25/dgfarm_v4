@@ -103,7 +103,7 @@ function DateDropdown({ refEl, label, from, to, show, setShow, setFrom, setTo, s
 
 const rowGrid: React.CSSProperties = {
   display: 'grid',
-  gridTemplateColumns: '160px 1fr 1fr 100px 150px 120px',
+  gridTemplateColumns: '40px 140px 1fr 1fr 100px 150px 110px',
   padding: '0 16px',
   gap: '0 12px',
   alignItems: 'center',
@@ -113,7 +113,10 @@ const rowGrid: React.CSSProperties = {
 
 const STATUS_OPTIONS: StatusFilter[] = ['Tất cả', 'Hoàn thành', 'Đã hủy', 'Từ chối']
 
-export default function CustomerInvoiceTable({ initialInvoices }: { initialInvoices: Invoice[] }) {
+export default function CustomerInvoiceTable({ initialInvoices, onDeleteMany }: { initialInvoices: Invoice[], onDeleteMany: (ids: string[]) => Promise<void> }) {
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [search, setSearch]         = useState('')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('Tất cả')
   const [dateFrom, setDateFrom]     = useState('')
@@ -167,6 +170,31 @@ export default function CustomerInvoiceTable({ initialInvoices }: { initialInvoi
     const data = await getInvoiceWithItemsUseCase(orderId)
     setInvoice(data)
     setLoadingInvoice(false)
+  }
+
+  const toggleSelectAll = () => {
+    if (selectedIds.length === slice.length) {
+      setSelectedIds([])
+    } else {
+      setSelectedIds(slice.map(o => o.id))
+    }
+  }
+
+  const toggleSelectOne = (id: string) => {
+    setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id])
+  }
+
+  const handleDelete = async () => {
+    setIsDeleting(true)
+    try {
+      await onDeleteMany(selectedIds)
+      setSelectedIds([])
+      setShowDeleteConfirm(false)
+    } catch (e) {
+      alert('Lỗi khi xóa hóa đơn')
+    } finally {
+      setIsDeleting(false)
+    }
   }
 
   return (
@@ -250,18 +278,40 @@ export default function CustomerInvoiceTable({ initialInvoices }: { initialInvoi
 
         {/* ── Main ── */}
         <main style={{ flex: 1, padding: '14px 16px', minWidth: 0 }}>
-          <div style={{ marginBottom: 12 }}>
+          <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{ width: 420, position: 'relative', height: 38, background: '#fff', borderRadius: 4, display: 'flex', alignItems: 'center', border: '1px solid #ddd' }}>
               <input type="text" value={search} onChange={e => { setSearch(e.target.value); setPage(1) }}
                 placeholder="Tìm theo mã HĐ, mã KH, tên KH, người bán..."
                 style={{ width: '100%', height: '100%', border: 'none', outline: 'none', fontSize: 13, padding: '0 40px 0 14px', background: 'transparent' }} />
               <span style={{ position: 'absolute', right: 12, color: '#797979', fontSize: 16, pointerEvents: 'none' }}>🔍</span>
             </div>
+
+            {selectedIds.length > 0 && (
+              <button
+                onClick={() => setShowDeleteConfirm(true)}
+                style={{
+                  height: 38, padding: '0 18px', background: '#fee2e2', color: '#b91c1c',
+                  border: '1px solid #fca5a5', borderRadius: 6, fontSize: 13, fontWeight: 700,
+                  cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6
+                }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6" />
+                </svg>
+                Xóa {selectedIds.length} mục đã chọn
+              </button>
+            )}
           </div>
 
           <div style={{ borderRadius: 4, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
             {/* Header row */}
             <div style={{ ...rowGrid, background: '#CEE8FF', height: 44, fontWeight: 700, borderBottom: '1px solid #b8d8f0' }}>
+              <div style={{ display: 'flex', justifyContent: 'center' }}>
+                <input type="checkbox"
+                  checked={slice.length > 0 && selectedIds.length === slice.length}
+                  onChange={toggleSelectAll}
+                  style={{ width: 15, height: 15, cursor: 'pointer' }}
+                />
+              </div>
               <div>Mã hóa đơn</div>
               <div>Khách hàng</div>
               <div>Người bán</div>
@@ -280,6 +330,13 @@ export default function CustomerInvoiceTable({ initialInvoices }: { initialInvoi
                 onMouseEnter={e => (e.currentTarget.style.background = '#f0f5ff')}
                 onMouseLeave={e => (e.currentTarget.style.background = idx % 2 === 0 ? '#fff' : '#fafafa')}
               >
+                <div style={{ display: 'flex', justifyContent: 'center' }}>
+                  <input type="checkbox"
+                    checked={selectedIds.includes(o.id)}
+                    onChange={() => toggleSelectOne(o.id)}
+                    style={{ width: 15, height: 15, cursor: 'pointer' }}
+                  />
+                </div>
                 {/* Mã HĐ — mở modal */}
                 <div>
                   <span onClick={() => openInvoice(o.id)}
@@ -366,6 +423,34 @@ export default function CustomerInvoiceTable({ initialInvoices }: { initialInvoi
                 <InvoiceSummary items={invoice.order_items} />
               </>
             )}
+          </div>
+        </Overlay>
+      )}
+
+      {/* ── Delete confirmation modal ── */}
+      {showDeleteConfirm && (
+        <Overlay>
+          <div style={{ background: '#fff', borderRadius: 12, padding: '28px 24px', width: 360, boxShadow: '0 10px 40px rgba(0,0,0,0.2)' }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: '#b91c1c', marginBottom: 12 }}>Xác nhận xóa</div>
+            <p style={{ fontSize: 13, color: '#555', marginBottom: 24, lineHeight: 1.6 }}>
+              Bạn có chắc chắn muốn xóa <strong>{selectedIds.length}</strong> hóa đơn đã chọn? Hành động này không thể hoàn tác.
+            </p>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                disabled={isDeleting}
+                style={{ flex: 1, height: 38, background: '#f3f4f6', border: 'none', borderRadius: 8, fontSize: 13, cursor: 'pointer', fontWeight: 500 }}
+              >
+                Hủy
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={isDeleting}
+                style={{ flex: 1, height: 38, background: '#dc2626', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
+              >
+                {isDeleting ? 'Đang xóa...' : 'Xóa ngay'}
+              </button>
+            </div>
           </div>
         </Overlay>
       )}

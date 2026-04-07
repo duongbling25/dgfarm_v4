@@ -1,9 +1,11 @@
 'use client'
 
 import React, { useState, useTransition, useRef, useEffect } from 'react'
-import type { DistributorOrder, DistributorOrderStatus } from '@/domain/entities/DistributorOrder'
+import type { DistributorOrder, DistributorOrderStatus, DistributorOrderWithItems } from '@/domain/entities/DistributorOrder'
 import type { Distributor } from '@/domain/entities/Distributor'
+import type { Product } from '@/domain/entities/Product'
 import type { CreateDistributorOrderInput } from '@/domain/repositories/IDistributorOrderRepository'
+import { getDistributorInvoiceWithItemsUseCase } from '@/application/use-cases/order/GetDistributorInvoicesUseCase'
 
 const fmt = (n: number) => n.toLocaleString('vi-VN')
 
@@ -47,6 +49,7 @@ function getDateRange(opt: string) {
 interface Props {
   initialOrders: DistributorOrder[]
   distributors: Distributor[]
+  products: Product[]
   role: 'admin' | 'manager' | 'staff'
   accountId: string
   onCreateOrder: (input: CreateDistributorOrderInput) => Promise<string>
@@ -56,6 +59,7 @@ interface Props {
 export default function DistributorOrderTable({
   initialOrders,
   distributors,
+  products,
   role,
   accountId,
   onCreateOrder,
@@ -81,6 +85,17 @@ export default function DistributorOrderTable({
   const [pendingFormData, setPendingFormData] = useState<CreateDistributorOrderInput | null>(null)
 
   const [showCancelConfirm, setShowCancelConfirm] = useState<string | null>(null)
+
+  const [detail, setDetail] = useState<DistributorOrderWithItems | null>(null)
+  const [loadingDetail, setLoadingDetail] = useState(false)
+
+  const openDetail = async (id: string) => {
+    setLoadingDetail(true)
+    setDetail(null)
+    const data = await getDistributorInvoiceWithItemsUseCase(id)
+    setDetail(data)
+    setLoadingDetail(false)
+  }
 
   const dateRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -295,7 +310,14 @@ export default function DistributorOrderTable({
                 <div>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" strokeWidth="1.5"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" /></svg>
                 </div>
-                <div style={{ color: '#253584', fontWeight: 700, fontSize: 13 }}>{order.id}</div>
+                <div>
+                  <span
+                    onClick={() => openDetail(order.id)}
+                    style={{ color: '#253584', fontWeight: 700, fontSize: 13, cursor: 'pointer', textDecoration: 'underline', textUnderlineOffset: 2 }}
+                  >
+                    {order.id}
+                  </span>
+                </div>
                 <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 13 }}>
                   {order.distributor_name}
                   {order.discount_pct > 0 && (
@@ -361,6 +383,7 @@ export default function DistributorOrderTable({
         <Overlay>
           <CreateOrderForm
             distributors={distributors}
+            products={products}
             role={role}
             accountId={accountId}
             isPending={isPending}
@@ -413,13 +436,100 @@ export default function DistributorOrderTable({
           </div>
         </Overlay>
       )}
+
+      {/* ORDER DETAIL MODAL */}
+      {(loadingDetail || detail) && (
+        <Overlay>
+          <div style={{ background: '#fff', borderRadius: 12, padding: '24px 28px 20px', width: 760, maxWidth: '95vw', maxHeight: '88vh', overflowY: 'auto', boxShadow: '0 10px 40px rgba(0,0,0,0.22)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
+              <span style={{ fontSize: 15, fontWeight: 700, color: '#0E176E' }}>
+                {loadingDetail ? 'Đang tải...' : `Đơn đặt hàng ${detail?.id}`}
+              </span>
+              <button onClick={() => setDetail(null)} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: '#888' }}>✕</button>
+            </div>
+
+            {detail && !loadingDetail && (
+              <>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 24px', fontSize: 12, color: '#555', marginBottom: 16, padding: '12px 14px', background: '#f8faff', borderRadius: 8, border: '1px solid #e5e7eb' }}>
+                  <span>📦 NPP: <strong style={{ color: '#253584' }}>{detail.distributor_name}</strong></span>
+                  <span>🏷️ Mã NPP: <strong>{detail.distributor_id}</strong></span>
+                  <span>🕐 Ngày đặt: {new Date(detail.ordered_at).toLocaleString('vi-VN')}</span>
+                  {detail.delivery_date && <span>🚚 Giao dự kiến: {new Date(detail.delivery_date).toLocaleDateString('vi-VN')}</span>}
+                  {detail.ordered_by && <span>👤 Người tạo: {detail.ordered_by}</span>}
+                  {detail.note && <span>📝 Ghi chú: {detail.note}</span>}
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    Trạng thái: <StatusBadge status={detail.status} />
+                  </span>
+                </div>
+
+                <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontSize: 13, border: '1px solid #d0e4f0', borderRadius: 8, overflow: 'hidden' }}>
+                  <thead>
+                    <tr>
+                      {['Mã hàng', 'Tên hàng', 'ĐVT', 'Số lượng', 'Đơn giá', 'Thành tiền'].map((hd, i) => (
+                        <th key={hd} style={{ background: '#CEE8FF', padding: '10px 12px', textAlign: i >= 3 ? 'right' : 'left', fontWeight: 700, fontSize: 12 }}>{hd}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {detail.items.map((item, idx) => (
+                      <tr key={idx} style={{ borderTop: '1px solid #eef2f7' }}>
+                        <td style={{ padding: '9px 12px', color: '#253584', fontWeight: 600 }}>{item.product_code}</td>
+                        <td style={{ padding: '9px 12px' }}>{item.product_name}</td>
+                        <td style={{ padding: '9px 12px' }}>{item.unit}</td>
+                        <td style={{ padding: '9px 12px', textAlign: 'right' }}>{item.quantity}</td>
+                        <td style={{ padding: '9px 12px', textAlign: 'right' }}>{fmt(item.unit_price)}</td>
+                        <td style={{ padding: '9px 12px', textAlign: 'right', fontWeight: 600 }}>{fmt(item.quantity * item.unit_price)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
+                  <table style={{ fontSize: 13, minWidth: 280 }}>
+                    <tbody>
+                      <tr>
+                        <td style={{ padding: '4px 8px', color: '#555' }}>Tổng tiền hàng:</td>
+                        <td style={{ padding: '4px 8px', textAlign: 'right', fontWeight: 600 }}>{fmt(detail.subtotal ?? detail.total)} đ</td>
+                      </tr>
+                      {(detail.discount_pct ?? 0) > 0 && (
+                        <tr>
+                          <td style={{ padding: '4px 8px', color: '#7C4D00' }}>
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                                <line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/>
+                              </svg>
+                              Chiết khấu {detail.discount_pct}%:
+                            </span>
+                          </td>
+                          <td style={{ padding: '4px 8px', textAlign: 'right', fontWeight: 600, color: '#7C4D00' }}>
+                            -{fmt((detail.subtotal ?? detail.total) - detail.total)} đ
+                          </td>
+                        </tr>
+                      )}
+                      <tr style={{ borderTop: '1px solid #ddd' }}>
+                        <td style={{ padding: '8px 8px 4px', fontWeight: 700, fontSize: 14, color: '#0E176E' }}>Tổng thanh toán:</td>
+                        <td style={{ padding: '8px 8px 4px', textAlign: 'right', fontWeight: 700, fontSize: 14, color: '#0E176E' }}>{fmt(detail.total)} đ</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+
+            {loadingDetail && (
+              <div style={{ textAlign: 'center', padding: 40, color: '#aaa', fontSize: 13 }}>Đang tải thông tin đơn hàng...</div>
+            )}
+          </div>
+        </Overlay>
+      )}
     </>
   )
 }
 
 // ── CREATE ORDER FORM ──
-function CreateOrderForm({ distributors, role, accountId, isPending, onSubmit, onClose }: {
+function CreateOrderForm({ distributors, products, role, accountId, isPending, onSubmit, onClose }: {
   distributors: Distributor[]
+  products: Product[]
   role: 'admin' | 'manager' | 'staff'
   accountId: string
   isPending: boolean
@@ -433,52 +543,6 @@ function CreateOrderForm({ distributors, role, accountId, isPending, onSubmit, o
   const [items, setItems] = useState([
     { product_code: '', product_name: '', unit: 'kg', quantity: 0, unit_price: 0 }
   ])
-
-  // Danh sách gợi ý sản phẩm nông sản DGFarm
-  const PRODUCT_SUGGESTIONS = [
-    { code: 'RAU001', name: 'Rau muống', unit: 'kg' },
-    { code: 'RAU002', name: 'Rau cải ngọt', unit: 'kg' },
-    { code: 'RAU003', name: 'Rau cải xanh', unit: 'kg' },
-    { code: 'RAU004', name: 'Cải thìa', unit: 'kg' },
-    { code: 'RAU005', name: 'Xà lách', unit: 'kg' },
-    { code: 'RAU006', name: 'Rau mùi (ngò rí)', unit: 'kg' },
-    { code: 'RAU007', name: 'Hành lá', unit: 'kg' },
-    { code: 'RAU008', name: 'Húng quế', unit: 'kg' },
-    { code: 'CU001',  name: 'Cà chua', unit: 'kg' },
-    { code: 'CU002',  name: 'Dưa leo', unit: 'kg' },
-    { code: 'CU003',  name: 'Bí đỏ', unit: 'kg' },
-    { code: 'CU004',  name: 'Bí xanh', unit: 'kg' },
-    { code: 'CU005',  name: 'Cà rốt', unit: 'kg' },
-    { code: 'CU006',  name: 'Khoai tây', unit: 'kg' },
-    { code: 'CU007',  name: 'Khoai lang', unit: 'kg' },
-    { code: 'CU008',  name: 'Củ cải trắng', unit: 'kg' },
-    { code: 'CU009',  name: 'Ngô ngọt', unit: 'kg' },
-    { code: 'CU010',  name: 'Ớt chuông', unit: 'kg' },
-    { code: 'QUA001', name: 'Dứa (thơm)', unit: 'kg' },
-    { code: 'QUA002', name: 'Xoài cát Hòa Lộc', unit: 'kg' },
-    { code: 'QUA003', name: 'Nhãn lồng Hưng Yên', unit: 'kg' },
-    { code: 'QUA004', name: 'Vải thiều Lục Ngạn', unit: 'kg' },
-    { code: 'QUA005', name: 'Thanh long ruột đỏ', unit: 'kg' },
-    { code: 'QUA006', name: 'Bưởi da xanh', unit: 'kg' },
-    { code: 'KHO001', name: 'Gạo ST25', unit: 'kg' },
-    { code: 'KHO002', name: 'Gạo Nàng Hương Chợ Đào', unit: 'kg' },
-    { code: 'KHO003', name: 'Đậu xanh', unit: 'kg' },
-    { code: 'KHO004', name: 'Đậu phộng (lạc)', unit: 'kg' },
-    { code: 'KHO005', name: 'Mè đen (vừng)', unit: 'kg' },
-    { code: 'KHO006', name: 'Nấm mộc nhĩ khô', unit: 'kg' },
-    { code: 'KHO007', name: 'Nấm rơm khô', unit: 'kg' },
-    { code: 'DCS001', name: 'Nước mắm Phú Quốc', unit: 'chai' },
-    { code: 'DCS002', name: 'Mật ong rừng Tây Nguyên', unit: 'lọ' },
-    { code: 'DCS003', name: 'Tiêu đen Phú Quốc', unit: 'kg' },
-    { code: 'DCS004', name: 'Cà phê Arabica Đà Lạt', unit: 'kg' },
-    { code: 'DCS005', name: 'Chè Shan Tuyết Hà Giang', unit: 'kg' },
-    { code: 'DCS006', name: 'Muối ớt Tây Ninh', unit: 'kg' },
-    { code: 'GV001',  name: 'Tỏi Lý Sơn', unit: 'kg' },
-    { code: 'GV002',  name: 'Gừng tươi', unit: 'kg' },
-    { code: 'GV003',  name: 'Sả tươi', unit: 'kg' },
-    { code: 'GV004',  name: 'Nghệ tươi', unit: 'kg' },
-    { code: 'GV005',  name: 'Ớt hiểm', unit: 'kg' },
-  ]
 
   type SuggestState = { idx: number; field: 'code' | 'name'; value: string } | null
   const [suggestState, setSuggestState] = useState<SuggestState>(null)
@@ -495,14 +559,14 @@ function CreateOrderForm({ distributors, role, accountId, isPending, onSubmit, o
   const getSuggestions = (field: 'code' | 'name', value: string) => {
     if (!value) return []
     const q = value.toLowerCase()
-    return PRODUCT_SUGGESTIONS.filter(p =>
-      field === 'code' ? p.code.toLowerCase().includes(q) : p.name.toLowerCase().includes(q)
-    ).slice(0, 6)
+    return products.filter(p =>
+      field === 'code' ? p.id.toLowerCase().includes(q) : p.name.toLowerCase().includes(q)
+    ).slice(0, 8)
   }
 
-  const applySuggestion = (idx: number, p: typeof PRODUCT_SUGGESTIONS[0]) => {
+  const applySuggestion = (idx: number, p: Product) => {
     setItems(prev => prev.map((it, i) => i === idx
-      ? { ...it, product_code: p.code, product_name: p.name, unit: p.unit }
+      ? { ...it, product_code: p.id, product_name: p.name, unit: p.unit || 'kg', unit_price: p.sell_price }
       : it))
     setSuggestState(null)
   }

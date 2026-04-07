@@ -15,6 +15,7 @@ export interface ActivityLog {
 export interface DashboardData {
   todaySummary: {
     totalRevenue:  number
+    netRevenue:    number
     totalOrders:   number
     pendingOrders: number
   }

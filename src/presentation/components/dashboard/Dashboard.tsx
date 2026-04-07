@@ -17,17 +17,28 @@ export const Dashboard = (): JSX.Element => {
   const { data, loading } = useDashboard()
 
   const totalRevenue  = data?.todaySummary?.totalRevenue  ?? 0
+  const netRevenue    = data?.todaySummary?.netRevenue    ?? 0
   const totalOrders   = data?.todaySummary?.totalOrders   ?? 0
   const lowStockCount = data?.lowStockCount              ?? 0
 
   const statCards = [
     {
-      label: loading ? '...' : `${totalOrders} hóa đơn hôm nay`,
+      label: loading ? '...' : `Doanh thu hôm nay`,
       value: loading ? '—' : fmt(totalRevenue) + '₫',
       iconBg: 'bg-[#FFF5D9]',
       icon: (
         <svg viewBox="0 0 24 24" fill="none" className="w-6 h-6">
           <path d="M12 2C9.243 2 7 4.243 7 7s2.243 5 5 5 5-2.243 5-5-2.243-5-5-5zm0 8c-1.654 0-3-1.346-3-3s1.346-3 3-3 3 1.346 3 3-1.346 3-3 3zm0 2c-5.33 0-8 2.686-8 4v1h16v-1c0-1.314-2.67-4-8-4z" fill="#FFBB38"/>
+        </svg>
+      ),
+    },
+    {
+      label: 'Doanh thu thuần (HĐ+NPP)',
+      value: loading ? '—' : fmt(netRevenue) + '₫',
+      iconBg: 'bg-[#E7F9EE]',
+      icon: (
+        <svg viewBox="0 0 24 24" fill="none" className="w-6 h-6">
+          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z" fill="#2D9A47"/>
         </svg>
       ),
     },
@@ -61,7 +72,7 @@ export const Dashboard = (): JSX.Element => {
           Kết quả bán hàng hôm nay
         </h2>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           {statCards.map((card) => (
             <div key={card.label} className="bg-white rounded-[25px] px-8 py-5 flex items-center gap-4 shadow-sm">
               <div className={`${card.iconBg} w-14 h-14 rounded-full flex items-center justify-center shrink-0`}>

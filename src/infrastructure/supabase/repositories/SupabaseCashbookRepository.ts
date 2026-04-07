@@ -5,7 +5,7 @@
 //   cashbook_tai_khoan
 //   cashbook_loai
 
-import { createClient } from '@/infrastructure/supabase/client'
+import { createClient } from '@/infrastructure/supabase/server'
 import type {
   IPhieuThuChiRepository,
   ILoaiThuChiRepository,
@@ -43,7 +43,8 @@ export class SupabasePhieuThuChiRepository implements IPhieuThuChiRepository {
     if (kieu)             q = q.eq('kieu', kieu)
     if (trang_thai)       q = q.eq('trang_thai', trang_thai)
     if (tu_ngay)          q = q.gte('thoi_gian', tu_ngay)
-    if (den_ngay)         q = q.lte('thoi_gian', den_ngay + 'T23:59:59')
+    // FIX timezone: den_ngay dùng end-of-day UTC+7 thay vì T23:59:59 local
+    if (den_ngay)         q = q.lt('thoi_gian', den_ngay + 'T17:00:00.000Z') // 17:00 UTC = 00:00 ngày hôm sau UTC+7
     if (loai_thu_chi_id)  q = q.eq('loai_thu_chi_id', loai_thu_chi_id)
     if (tu_khoa) {
       q = q.or(
@@ -55,6 +56,10 @@ export class SupabasePhieuThuChiRepository implements IPhieuThuChiRepository {
     q = q.range(from, from + page_size - 1)
 
     const { data, error, count } = await q
+
+    // DEBUG — xem terminal/server logs để tìm nguyên nhân data rỗng
+    console.log('[CashbookRepo] findAll:', { error: error?.message, count, rowCount: data?.length, filter: JSON.stringify(filter) })
+
     if (error) throw new Error(error.message)
 
     // PostgREST trả alias 'loai' và 'tai_khoan' → map lại thành tên field entity
@@ -267,6 +272,10 @@ export class SupabaseTaiKhoanQuyRepository implements ITaiKhoanQuyRepository {
     const { data: tkData, error: tkError } = await supabase
       .from('cashbook_tai_khoan')
       .select('*')
+
+    // DEBUG — kiểm tra xem RLS có block cashbook_tai_khoan không
+    console.log('[CashbookRepo] getTongQuy - cashbook_tai_khoan:', { error: tkError?.message, count: tkData?.length })
+
     if (tkError) throw new Error(tkError.message)
 
     const accounts = (tkData ?? []) as TaiKhoanQuy[]
@@ -299,6 +308,69 @@ export class SupabaseTaiKhoanQuyRepository implements ITaiKhoanQuyRepository {
         tong_thu,
         tong_chi,
         ton_quy: so_du_dau_ky + tong_thu - tong_chi,
+      } as TongQuyRow
+    })
+  }
+
+  // MỚI: Tính balance theo kỳ (có tu_ngay / den_ngay)
+  async getTongQuyTheoKy(
+    accountIds: string[],
+    tu_ngay?: string,
+    den_ngay?: string,
+  ): Promise<TongQuyRow[]> {
+    const supabase = await createClient()
+
+    const { data: tkData, error: tkError } = await supabase
+      .from('cashbook_tai_khoan')
+      .select('*')
+      .in('id', accountIds)
+    if (tkError) throw new Error(tkError.message)
+
+    const accounts = (tkData ?? []) as TaiKhoanQuy[]
+    if (accounts.length === 0) return []
+
+    // Phiếu trước kỳ → tính tồn đầu kỳ
+    let qTruoc = supabase
+      .from('cashbook_phieu')
+      .select('tai_khoan_quy_id, kieu, gia_tri')
+      .eq('trang_thai', 'da_thanh_toan')
+      .in('tai_khoan_quy_id', accountIds)
+    if (tu_ngay) qTruoc = qTruoc.lt('thoi_gian', tu_ngay)
+
+    // Phiếu trong kỳ → tính thu/chi kỳ
+    let qTrongKy = supabase
+      .from('cashbook_phieu')
+      .select('tai_khoan_quy_id, kieu, gia_tri')
+      .eq('trang_thai', 'da_thanh_toan')
+      .in('tai_khoan_quy_id', accountIds)
+    if (tu_ngay)  qTrongKy = qTrongKy.gte('thoi_gian', tu_ngay)
+    if (den_ngay) qTrongKy = qTrongKy.lt('thoi_gian', den_ngay + 'T17:00:00.000Z')
+
+    const [{ data: truocData }, { data: trongData }] = await Promise.all([
+      qTruoc, qTrongKy,
+    ])
+
+    const truocList  = truocData  ?? []
+    const trongList  = trongData  ?? []
+
+    return accounts.map(tk => {
+      // Tồn đầu kỳ = số dư đầu kỳ khai báo + toàn bộ giao dịch trước kỳ
+      const truoc_thu = truocList.filter(p => p.tai_khoan_quy_id === tk.id && p.kieu === 'thu').reduce((s, p) => s + Number(p.gia_tri), 0)
+      const truoc_chi = truocList.filter(p => p.tai_khoan_quy_id === tk.id && p.kieu === 'chi').reduce((s, p) => s + Number(p.gia_tri), 0)
+      const so_du_dau_ky = Number(tk.so_du_dau_ky ?? 0)
+      const ton_dau_ky   = tu_ngay ? so_du_dau_ky + truoc_thu - truoc_chi : so_du_dau_ky
+
+      const tong_thu = trongList.filter(p => p.tai_khoan_quy_id === tk.id && p.kieu === 'thu').reduce((s, p) => s + Number(p.gia_tri), 0)
+      const tong_chi = trongList.filter(p => p.tai_khoan_quy_id === tk.id && p.kieu === 'chi').reduce((s, p) => s + Number(p.gia_tri), 0)
+
+      return {
+        id: tk.id,
+        ten_tai_khoan: tk.ten_tai_khoan,
+        loai: tk.loai,
+        so_du_dau_ky:  ton_dau_ky,   // đây là tồn đầu kỳ thực tế
+        tong_thu,
+        tong_chi,
+        ton_quy: ton_dau_ky + tong_thu - tong_chi,
       } as TongQuyRow
     })
   }

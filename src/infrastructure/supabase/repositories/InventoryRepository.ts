@@ -151,7 +151,7 @@ export class InventoryRepository {
       p_total_decrease: data.total_decrease,
     };
 
-    const { error } = await this.supabase.rpc('adjust_stock_atomic', payload);
+    const { error } = await (this.supabase as any).rpc('adjust_stock_atomic', payload);
 
     if (error) {
       console.error('[InventoryRepository] RPC Error:', error);

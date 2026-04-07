@@ -21,55 +21,106 @@ export class SupabaseOrderRepository implements IOrderRepository {
     const today = new Date()
     today.setHours(0, 0, 0, 0)
 
-    const { data, error } = await supabase
+    // 1. Customer orders
+    const { data: custData, error: custErr } = await supabase
       .from('orders')
       .select('total, workflow_status')
       .gte('ordered_at', today.toISOString())
 
-    if (error) throw error
+    if (custErr) throw custErr
 
-    const completed = (data ?? []).filter(o => o.workflow_status === 'Hoàn thành')
-    const totalRevenue  = completed.reduce((s, o) => s + Number(o.total), 0)
-    const totalOrders   = (data ?? []).length
-    const pendingOrders = (data ?? []).filter(o =>
+    // 2. Distributor orders
+    const { data: distData, error: distErr } = await supabase
+      .from('distributor_orders')
+      .select('total, status')
+      .gte('ordered_at', today.toISOString())
+
+    if (distErr) throw distErr
+
+    const custCompleted = (custData ?? []).filter(o => o.workflow_status === 'Hoàn thành')
+    const distCompleted = (distData ?? []).filter(o => o.status === 'Hoàn thành')
+
+    const customerRevenue = custCompleted.reduce((s, o) => s + Number(o.total), 0)
+    const distributorRevenue = distCompleted.reduce((s, o) => s + Number(o.total), 0)
+
+    const totalRevenue  = customerRevenue
+    const netRevenue    = customerRevenue + distributorRevenue
+
+    const totalOrders   = (custData ?? []).length
+    const pendingOrders = (custData ?? []).filter(o =>
       ['Chờ xác nhận', 'Đã xác nhận', 'Đang giao'].includes(o.workflow_status)
     ).length
 
-    return { totalRevenue, totalOrders, pendingOrders }
+    return { totalRevenue, netRevenue, totalOrders, pendingOrders }
   }
 
   async findMonthlyRevenue() {
     const supabase = await createClient()
-    const { data, error } = await supabase
+    
+    // 1. Fetch from customer orders
+    const { data: custData, error: custErr } = await supabase
       .from('orders')
       .select('total, ordered_at')
       .eq('workflow_status', 'Hoàn thành')
       .order('ordered_at', { ascending: true })
 
-    if (error) throw error
+    if (custErr) throw custErr
+
+    // 2. Fetch from distributor orders
+    const { data: distData, error: distErr } = await supabase
+      .from('distributor_orders')
+      .select('total, ordered_at')
+      .eq('status', 'Hoàn thành')
+      .order('ordered_at', { ascending: true })
+
+    if (distErr) throw distErr
 
     const map = new Map<string, number>()
-    for (const row of data ?? []) {
-      const month = new Date(row.ordered_at)
-        .toLocaleDateString('vi-VN', { month: 'short', year: '2-digit' })
-      map.set(month, (map.get(month) ?? 0) + Number(row.total))
+    
+    // Helper to group by month
+    const processRows = (rows: any[]) => {
+      for (const row of rows) {
+        const date = new Date(row.ordered_at)
+        const month = date.toLocaleDateString('vi-VN', { month: 'short', year: '2-digit' })
+        map.set(month, (map.get(month) ?? 0) + Number(row.total))
+      }
     }
+
+    processRows(custData ?? [])
+    processRows(distData ?? [])
+
     return Array.from(map.entries()).map(([month, revenue]) => ({ month, revenue }))
   }
 
   async findTopSellingProducts() {
     const supabase = await createClient()
-    const { data, error } = await supabase
+
+    // 1. Customer order items
+    const { data: custItems, error: custErr } = await supabase
       .from('order_items')
       .select('product_name, product_code, quantity')
 
-    if (error) throw error
+    if (custErr) throw custErr
+
+    // 2. Distributor order items
+    const { data: distItems, error: distErr } = await supabase
+      .from('distributor_order_items')
+      .select('product_name, product_code, quantity')
+
+    if (distErr) throw distErr
 
     const map = new Map<string, { name: string; total: number }>()
-    for (const row of data ?? []) {
-      const existing = map.get(row.product_code) ?? { name: row.product_name, total: 0 }
-      map.set(row.product_code, { ...existing, total: existing.total + Number(row.quantity) })
+    
+    const processItems = (items: any[]) => {
+      for (const row of items ?? []) {
+        const existing = map.get(row.product_code) ?? { name: row.product_name, total: 0 }
+        map.set(row.product_code, { ...existing, total: existing.total + Number(row.quantity) })
+      }
     }
+
+    processItems(custItems)
+    processItems(distItems)
+
     return Array.from(map.entries())
       .map(([code, val]) => ({ code, name: val.name, totalSold: val.total }))
       .sort((a, b) => b.totalSold - a.totalSold)
@@ -133,5 +184,14 @@ export class SupabaseOrderRepository implements IOrderRepository {
     }
 
     revalidatePath('/giao-dich/dat-hang/khach-hang')
+  }
+
+  async deleteMany(ids: string[]): Promise<void> {
+    const supabase = await createClient()
+    const { error: itemErr } = await supabase.from('order_items').delete().in('order_id', ids)
+    if (itemErr) throw new Error(itemErr.message)
+    const { error: orderErr } = await supabase.from('orders').delete().in('id', ids)
+    if (orderErr) throw new Error(orderErr.message)
+    revalidatePath('/giao-dich/hoa-don')
   }
 }

@@ -8,7 +8,8 @@ import type { CashbookFilterDTO, LapPhieuDTO, CapNhatPhieuDTO, ThemLoaiDTO, Them
 import {
   getDanhSachPhieu, lapPhieuThu, lapPhieuChi, capNhatPhieu, huyPhieu,
   getLoaiThuChi, themLoaiThuChi, xoaLoaiThuChi,
-  getTaiKhoanQuy, getTongQuy, themTaiKhoanQuy, suaTaiKhoanQuy, xoaTaiKhoanQuy,
+  getTaiKhoanQuy, getTongQuy, getTongQuyTheoKy,
+  themTaiKhoanQuy, suaTaiKhoanQuy, xoaTaiKhoanQuy,
 } from '@/application/use-cases/cashbook/CashbookUseCases'
 
 // ── Danh sách phiếu ────────────────────────────────────────────
@@ -23,7 +24,7 @@ export function useDanhSachPhieu(init: CashbookFilterDTO = {}) {
     setError(null)
     try {
       const data = await getDanhSachPhieu(filter)
-      setResult(data)
+      setResult(data as PagedResult<PhieuThuChi>)
     } catch (e: any) {
       setError(e.message)
     } finally {
@@ -77,7 +78,7 @@ export function usePhieuActions(onSuccess?: () => void) {
 }
 
 // ── Tài khoản quỹ ──────────────────────────────────────────────
-export function useTaiKhoanQuy() {
+export function useTaiKhoanQuy(tu_ngay?: string, den_ngay?: string) {
   const [list, setList] = useState<TaiKhoanQuy[]>([])
   const [tongQuy, setTongQuy] = useState<TongQuyRow[]>([])
   const [loading, setLoading] = useState(false)
@@ -87,15 +88,26 @@ export function useTaiKhoanQuy() {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const [l, t] = await Promise.all([getTaiKhoanQuy(), getTongQuy()])
-      setList(l)
-      setTongQuy(t)
+      const accounts = await getTaiKhoanQuy()
+      setList(accounts)
+
+      // Nếu có kỳ lọc → tính balance theo kỳ, ngược lại dùng tổng toàn thời gian
+      if (tu_ngay || den_ngay) {
+        const ids = accounts.map(a => a.id)
+        const tq = ids.length > 0
+          ? await getTongQuyTheoKy(ids, tu_ngay, den_ngay)
+          : []
+        setTongQuy(tq)
+      } else {
+        const tq = await getTongQuy()
+        setTongQuy(tq)
+      }
     } catch (e: any) {
       setError(e.message)
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [tu_ngay, den_ngay])
 
   useEffect(() => { load() }, [load])
 

@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/infrastructure/supabase/server'
 import { SupabaseDistributorRepository } from '@/infrastructure/supabase/repositories/SupabaseDistributorRepository'
 import { SupabaseDistributorOrderRepository } from '@/infrastructure/supabase/repositories/SupabaseDistributorOrderRepository'
+import { SupabaseProductRepository } from '@/infrastructure/supabase/repositories/SupabaseProductRepository'
 import DistributorOrderTable from '@/presentation/components/distributor/DistributorOrderTable'
 import type { DistributorOrderStatus } from '@/domain/entities/DistributorOrder'
 import type { CreateDistributorOrderInput } from '@/domain/repositories/IDistributorOrderRepository'
@@ -28,10 +29,12 @@ export default async function DatHangNhaPhanPhoiPage() {
 
   const distRepo = new SupabaseDistributorRepository()
   const orderRepo = new SupabaseDistributorOrderRepository()
+  const productRepo = new SupabaseProductRepository()
 
-  const [distributors, orders] = await Promise.all([
+  const [distributors, orders, products] = await Promise.all([
     distRepo.getAll(),
     orderRepo.getAll(),
+    productRepo.getAll(),
   ])
 
   async function createOrder(input: CreateDistributorOrderInput): Promise<string> {
@@ -50,10 +53,11 @@ export default async function DatHangNhaPhanPhoiPage() {
     <DistributorOrderTable
       initialOrders={orders}
       distributors={distributors}
+      products={products}
       role={role}
       accountId={accountId}
       onCreateOrder={createOrder}
       onUpdateStatus={updateStatus}
     />
   )
-}
+}

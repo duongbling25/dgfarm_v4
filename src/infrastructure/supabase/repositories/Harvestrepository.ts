@@ -35,7 +35,11 @@ export class HarvestRepository {
       .single();
 
     if (error) return null;
-    return data;
+    return {
+      ...data,
+      stock: data.stock ?? 0,
+      unit: data.unit ?? 'đv'
+    } as ProductInfo;
   }
 
   // ─── Lưu bản ghi thu hoạch vào DB ─────────────────────────

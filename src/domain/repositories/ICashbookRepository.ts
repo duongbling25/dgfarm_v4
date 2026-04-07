@@ -46,4 +46,5 @@ export interface ITaiKhoanQuyRepository {
   update(id: string, data: Partial<TaiKhoanQuy>): Promise<TaiKhoanQuy>
   delete(id: string): Promise<void>
   getTongQuy(): Promise<TongQuyRow[]>
+  getTongQuyTheoKy(accountIds: string[], tu_ngay?: string, den_ngay?: string): Promise<TongQuyRow[]>
 }

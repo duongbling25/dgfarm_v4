@@ -18,24 +18,52 @@ export default function ReportPage() {
 
   useEffect(() => {
     Promise.all([
+      // regular orders
       supabase.from('orders').select('total, ordered_at').eq('workflow_status', 'Hoàn thành'),
       supabase.from('order_items').select('product_code, product_name, quantity'),
-    ]).then(([ordersRes, itemsRes]) => {
-      // Monthly revenue
+      // distributor orders
+      supabase.from('distributor_orders').select('total, ordered_at').eq('status', 'Hoàn thành'),
+      supabase.from('distributor_order_items').select('product_code, product_name, quantity'),
+    ]).then(([ordersRes, itemsRes, distOrdersRes, distItemsRes]) => {
+      // 1. Combine and Process Monthly Revenue
       const map = new Map<string, { revenue: number; orders: number }>()
-      for (const o of ordersRes.data ?? []) {
-        const month = new Date(o.ordered_at).toLocaleDateString('vi-VN', { month: 'short', year: '2-digit' })
-        const ex = map.get(month) ?? { revenue: 0, orders: 0 }
-        map.set(month, { revenue: ex.revenue + Number(o.total), orders: ex.orders + 1 })
+      
+      const processOrders = (rows: any[]) => {
+        for (const o of rows) {
+          const month = new Date(o.ordered_at).toLocaleDateString('vi-VN', { month: 'short', year: '2-digit' })
+          const ex = map.get(month) ?? { revenue: 0, orders: 0 }
+          map.set(month, { revenue: ex.revenue + Number(o.total), orders: ex.orders + 1 })
+        }
       }
-      setMonthly(Array.from(map.entries()).map(([month, v]) => ({ month, ...v })))
 
-      // Top products
+      processOrders(ordersRes.data ?? [])
+      processOrders(distOrdersRes.data ?? [])
+      
+      const sortedMonthly = Array.from(map.entries())
+        .map(([month, v]) => ({ month, ...v }))
+        .sort((a, b) => {
+          const parseDate = (s: string) => {
+            const [m, y] = s.split(' ')
+            return new Date(2000 + parseInt(y), parseInt(m) - 1).getTime()
+          }
+          try { return parseDate(a.month) - parseDate(b.month) } catch { return 0 }
+        })
+
+      setMonthly(sortedMonthly)
+
+      // 2. Combine and Process Top Products
       const pmap = new Map<string, { name: string; totalSold: number }>()
-      for (const i of itemsRes.data ?? []) {
-        const ex = pmap.get(i.product_code) ?? { name: i.product_name, totalSold: 0 }
-        pmap.set(i.product_code, { ...ex, totalSold: ex.totalSold + Number(i.quantity) })
+      
+      const processItems = (rows: any[]) => {
+        for (const i of rows) {
+          const ex = pmap.get(i.product_code) ?? { name: i.product_name, totalSold: 0 }
+          pmap.set(i.product_code, { ...ex, totalSold: ex.totalSold + Number(i.quantity) })
+        }
       }
+
+      processItems(itemsRes.data ?? [])
+      processItems(distItemsRes.data ?? [])
+
       setTopProducts(
         Array.from(pmap.entries())
           .map(([code, v]) => ({ code, ...v }))

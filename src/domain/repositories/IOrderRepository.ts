@@ -3,8 +3,9 @@
 export interface IOrderRepository {
   findAll(): Promise<any[]>
   findTodaySummary(): Promise<{
-    totalRevenue:  number
-    totalOrders:   number
+    totalRevenue: number
+    netRevenue: number
+    totalOrders: number
     pendingOrders: number
   }>
   findMonthlyRevenue(): Promise<{ month: string; revenue: number }[]>
@@ -19,18 +20,19 @@ export interface IOrderRepository {
     created_at: string
   }[]>
   findConflictedOrders(productCode: string): Promise<{
-    order_id:       string
-    customer_id:    string
-    customer_name:  string
-    customer_tier:  string
-    ordered_at:     string
-    quantity:       number
+    order_id: string
+    customer_id: string
+    customer_name: string
+    customer_tier: string
+    ordered_at: string
+    quantity: number
     priority_score: number
   }[]>
   resolveConflict(conflictId: string, resolution: {
-    confirmOrderId:  string
-    cancelOrderIds:  string[]
-    handledBy:       string
-    note?:           string
+    confirmOrderId: string
+    cancelOrderIds: string[]
+    handledBy: string
+    note?: string
   }): Promise<void>
+  deleteMany(ids: string[]): Promise<void>
 }

@@ -48,7 +48,7 @@ export function useEmployees(initialEmployees: Employee[]) {
       await addEmployeeUseCase({ name: fName, phone: fPhone, birthday: fBirthday, position: fPosition })
       const today = new Date().toISOString().split('T')[0]
       const id = 'NV' + String(employees.length + 1).padStart(3, '0')
-      setEmployees(p => [{ id, name: fName, phone: fPhone || null, birthday: fBirthday || null, position: fPosition || null, staff_id: null, created_at: today }, ...p])
+      setEmployees(p => [{ id, name: fName, phone: fPhone || null, birthday: fBirthday || null, position: fPosition || null, account_id: null, created_at: today }, ...p])
       setShowAdd(false)
     })
   }

@@ -289,6 +289,9 @@ export default function CashbookPage() {
   const [huyTarget, setHuyTarget] = useState<{ id: string; ma: string } | null>(null)
   const [expanded, setExpanded] = useState<string | null>(null)
 
+  // FIX: Khởi tạo filter không có tai_khoan_quy_id, sau đó sync khi activeTK thay đổi
+  const { result, loading, filter, setFilter, refresh } = useDanhSachPhieu({})
+
   const {
     list: taiKhoanList,
     tongQuy,
@@ -299,31 +302,37 @@ export default function CashbookPage() {
     doThem: doThemTK,
     doSua: doSuaTK,
     doXoa: doXoaTK,
-  } = useTaiKhoanQuy()
+  } = useTaiKhoanQuy(filter.tu_ngay, filter.den_ngay)
+
+  // FIX: Tính activeTK từ taiKhoanList (loại tien_mat không cần tạo tài khoản, luôn dùng first match)
+  // Thêm state chọn tài khoản con (dùng khi 1 loại có nhiều TK)
+  const [selectedTKId, setSelectedTKId] = useState<string | null>(null)
 
   // FIX: Tính activeTK từ taiKhoanList (loại tien_mat không cần tạo tài khoản, luôn dùng first match)
   const activeTK = useMemo(() => {
     if (activeTab === 'tong') return null
-    // Ưu tiên tài khoản mặc định, nếu không có thì lấy đầu tiên theo loại
     const byLoai = taiKhoanList.filter(t => t.loai === activeTab)
+    if (selectedTKId) {
+      const found = byLoai.find(t => t.id === selectedTKId)
+      if (found) return found
+    }
     return byLoai.find(t => t.la_mac_dinh) ?? byLoai[0] ?? null
-  }, [activeTab, taiKhoanList])
-
-  // FIX: Khởi tạo filter không có tai_khoan_quy_id, sau đó sync khi activeTK thay đổi
-  const { result, loading, filter, setFilter, refresh } = useDanhSachPhieu({})
+  }, [activeTab, taiKhoanList, selectedTKId])
 
   // FIX: Đồng bộ tai_khoan_quy_id vào filter sau khi taiKhoanList load xong
+  const activeTKId = activeTK?.id || undefined
   useEffect(() => {
-    setFilter(prev => ({
-      ...prev,
-      tai_khoan_quy_id: activeTK?.id ?? undefined,
-      page: 1,
-    }))
-  }, [activeTK?.id, activeTab])
+    setFilter(prev => {
+      const nextId = activeTab === 'tong' ? undefined : activeTKId
+      if (prev.tai_khoan_quy_id === nextId) return prev
+      return { ...prev, tai_khoan_quy_id: nextId, page: 1 }
+    })
+  }, [activeTKId, activeTab])
 
   // Đổi tab → chỉ set activeTab, useEffect trên sẽ cập nhật filter
   const changeTab = (tab: CashbookLoaiTaiKhoan | 'tong') => {
     setActiveTab(tab)
+    setSelectedTKId(null)
     setExpanded(null)
   }
 
@@ -360,6 +369,12 @@ export default function CashbookPage() {
 
   return (
     <div style={{ display: 'flex', minHeight: 'calc(100vh - 96px)', background: '#F8FAFC', fontFamily: "'Inter', 'Be Vietnam Pro', system-ui, sans-serif" }}>
+      <style>{`
+        @keyframes shimmer {
+          0%   { background-position: 200% 0; }
+          100% { background-position: -200% 0; }
+        }
+      `}</style>
 
       {/* ── Sidebar ── */}
       <aside style={{ width: 220, background: '#fff', borderRight: '1px solid #E5E7EB', display: 'flex', flexDirection: 'column', padding: '16px 12px', gap: 16, flexShrink: 0 }}>
@@ -477,6 +492,28 @@ export default function CashbookPage() {
           </div>
         )}
 
+        {/* Sub-selector: khi 1 loại có nhiều tài khoản */}
+        {activeTab !== 'tong' && taiKhoanList.filter(t => t.loai === activeTab).length > 1 && (
+          <div style={{ padding: '8px 24px', background: '#F9FAFB', borderBottom: '1px solid #E5E7EB', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {taiKhoanList.filter(t => t.loai === activeTab).map(tk => (
+              <button
+                key={tk.id}
+                onClick={() => setSelectedTKId(tk.id)}
+                style={{
+                  padding: '4px 12px', borderRadius: 20, fontSize: 12, cursor: 'pointer', fontWeight: 600,
+                  border: '1px solid',
+                  borderColor: activeTK?.id === tk.id ? '#253584' : '#E5E7EB',
+                  background: activeTK?.id === tk.id ? '#253584' : '#fff',
+                  color: activeTK?.id === tk.id ? '#fff' : '#374151',
+                  transition: 'all 0.15s',
+                }}>
+                {tk.ten_tai_khoan}
+                {tk.la_mac_dinh && <span style={{ marginLeft: 4, opacity: 0.7 }}>★</span>}
+              </button>
+            ))}
+          </div>
+        )}
+
         {/* Summary cards */}
         {tongActive && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, padding: '14px 24px', background: '#F9FAFB', borderBottom: '1px solid #E5E7EB', flexShrink: 0 }}>
@@ -510,13 +547,38 @@ export default function CashbookPage() {
                 </tr>
               </thead>
               <tbody>
-                {loading && (
-                  <tr><td colSpan={7} style={{ textAlign: 'center', padding: 48, color: '#9CA3AF', fontSize: 14 }}>Đang tải...</td></tr>
-                )}
+                {loading && Array.from({ length: 5 }).map((_, i) => (
+                  <tr key={i} style={{ borderBottom: '1px solid #F3F4F6' }}>
+                    {Array.from({ length: 7 }).map((_, j) => (
+                      <td key={j} style={{ padding: '14px 16px' }}>
+                        <div style={{
+                          height: 12, borderRadius: 6,
+                          background: 'linear-gradient(90deg, #F3F4F6 25%, #E5E7EB 50%, #F3F4F6 75%)',
+                          backgroundSize: '200% 100%',
+                          animation: 'shimmer 1.4s infinite',
+                          width: j === 0 ? '80%' : j === 4 ? '60%' : '70%',
+                        }} />
+                      </td>
+                    ))}
+                  </tr>
+                ))}
                 {!loading && !result?.data?.length && (
-                  <tr><td colSpan={7} style={{ textAlign: 'center', padding: 48, color: '#9CA3AF' }}>
-                    <div style={{ fontSize: 32, marginBottom: 8 }}>📒</div>
-                    <div style={{ fontSize: 14 }}>Chưa có phiếu nào</div>
+                  <tr><td colSpan={7}>
+                    <div style={{ textAlign: 'center', padding: '48px 24px', color: '#9CA3AF' }}>
+                      <div style={{ fontSize: 40, marginBottom: 12 }}>
+                        {activeTab === 'tong' ? '📊' : activeTab === 'ngan_hang' ? '🏦' : activeTab === 'vi_dien_tu' ? '💳' : '💵'}
+                      </div>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: '#374151', marginBottom: 6 }}>
+                        {!activeTK && activeTab !== 'tong'
+                          ? `Chưa có tài khoản ${TABS.find(t => t.key === activeTab)?.label}`
+                          : 'Chưa có phiếu nào trong kỳ này'}
+                      </div>
+                      <div style={{ fontSize: 13 }}>
+                        {!activeTK && activeTab !== 'tong'
+                          ? 'Bấm "+ Thêm tài khoản" để bắt đầu'
+                          : 'Thử thay đổi bộ lọc hoặc lập phiếu mới'}
+                      </div>
+                    </div>
                   </td></tr>
                 )}
                 {result?.data?.map((p, i) => {

@@ -3,6 +3,8 @@
 import React, { useState, useTransition, useEffect, useCallback, useRef } from 'react'
 import { createClient } from '@/infrastructure/supabase/client'
 import { PgBtn } from '@/presentation/components/ui/SharedUI'
+import { getInvoiceWithItemsUseCase } from '@/application/use-cases/order/GetCustomerInvoicesUseCase'
+import type { OrderWithItems } from '@/domain/entities/Customer'
 
 const fmt = (n: number) => n.toLocaleString('vi-VN')
 
@@ -165,6 +167,16 @@ export default function OrderTable({ role, accountId }: Props) {
   const PER = 10
   const [isPending, startTransition] = useTransition()
   const [confirmAction, setConfirmAction] = useState<{ order: Order; type: 'cancel' | 'reject' } | null>(null)
+  const [detail, setDetail] = useState<OrderWithItems | null>(null)
+  const [loadingDetail, setLoadingDetail] = useState(false)
+
+  const openDetail = async (id: string) => {
+    setLoadingDetail(true)
+    setDetail(null)
+    const data = await getInvoiceWithItemsUseCase(id)
+    setDetail(data)
+    setLoadingDetail(false)
+  }
 
   const supabase = createClient()
 
@@ -420,7 +432,14 @@ export default function OrderTable({ role, accountId }: Props) {
                   onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = '#f9fbff'}
                   onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = '#fff'}>
                   <div><input type="checkbox" style={{ width: 13, height: 13, accentColor: '#253584', cursor: 'pointer' }} /></div>
-                  <div style={{ color: '#253584', fontWeight: 500 }}>{o.id}</div>
+                  <div>
+                    <span
+                      onClick={() => openDetail(o.id)}
+                      style={{ color: '#253584', fontWeight: 500, cursor: 'pointer', textDecoration: 'underline', textUnderlineOffset: 2 }}
+                    >
+                      {o.id}
+                    </span>
+                  </div>
                   <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.customer_name}</div>
                   <div style={{ fontWeight: 500 }}>{fmt(o.total)}</div>
                   <div>{wsBadge(o.workflow_status)}</div>
@@ -503,6 +522,72 @@ export default function OrderTable({ role, accountId }: Props) {
                 {isPending ? '...' : confirmAction.type === 'reject' ? 'Từ chối' : 'Hủy đơn'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ORDER DETAIL MODAL */}
+      {(loadingDetail || detail) && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: '#fff', borderRadius: 12, padding: '24px 28px 20px', width: 760, maxWidth: '95vw', maxHeight: '88vh', overflowY: 'auto', boxShadow: '0 10px 40px rgba(0,0,0,0.22)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
+              <span style={{ fontSize: 15, fontWeight: 700, color: '#0E176E' }}>
+                {loadingDetail ? 'Đang tải...' : `Đơn đặt hàng ${detail?.id}`}
+              </span>
+              <button onClick={() => setDetail(null)} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: '#888' }}>✕</button>
+            </div>
+
+            {detail && !loadingDetail && (
+              <>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 24px', fontSize: 12, color: '#555', marginBottom: 16, padding: '12px 14px', background: '#f8faff', borderRadius: 8, border: '1px solid #e5e7eb' }}>
+                  <span>👤 Khách hàng: <strong style={{ color: '#253584' }}>{detail.customer_id}</strong></span>
+                  <span>💰 Người bán: <strong>{detail.seller}</strong></span>
+                  <span>🕐 Ngày đặt: {new Date(detail.ordered_at).toLocaleString('vi-VN')}</span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    Trạng thái: {wsBadge(detail.workflow_status as WorkflowStatus)}
+                  </span>
+                </div>
+
+                <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontSize: 13, border: '1px solid #d0e4f0', borderRadius: 8, overflow: 'hidden' }}>
+                  <thead>
+                    <tr>
+                      {['Mã hàng', 'Tên hàng', 'Số lượng', 'Đơn giá', 'Chiết khấu', 'Thành tiền'].map((hd, i) => (
+                        <th key={hd} style={{ background: '#CEE8FF', padding: '10px 12px', textAlign: i >= 2 ? 'right' : 'left', fontWeight: 700, fontSize: 12 }}>{hd}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {detail.order_items.map((item, idx) => (
+                      <tr key={idx} style={{ borderTop: '1px solid #eef2f7' }}>
+                        <td style={{ padding: '9px 12px', color: '#253584', fontWeight: 600 }}>{item.product_code}</td>
+                        <td style={{ padding: '9px 12px' }}>{item.product_name}</td>
+                        <td style={{ padding: '9px 12px', textAlign: 'right' }}>{item.quantity}</td>
+                        <td style={{ padding: '9px 12px', textAlign: 'right' }}>{fmt(item.unit_price)}</td>
+                        <td style={{ padding: '9px 12px', textAlign: 'right', color: item.discount > 0 ? '#7C4D00' : '#aaa' }}>
+                          {item.discount > 0 ? `-${fmt(item.discount)}` : '—'}
+                        </td>
+                        <td style={{ padding: '9px 12px', textAlign: 'right', fontWeight: 600 }}>{fmt(item.sell_price * item.quantity)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
+                  <table style={{ fontSize: 13, minWidth: 280 }}>
+                    <tbody>
+                      <tr style={{ borderTop: '1px solid #ddd' }}>
+                        <td style={{ padding: '8px 8px 4px', fontWeight: 700, fontSize: 14, color: '#0E176E' }}>Tổng thanh toán:</td>
+                        <td style={{ padding: '8px 8px 4px', textAlign: 'right', fontWeight: 700, fontSize: 14, color: '#0E176E' }}>{fmt(detail.total)} đ</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+
+            {loadingDetail && (
+              <div style={{ textAlign: 'center', padding: 40, color: '#aaa', fontSize: 13 }}>Đang tải thông tin đơn hàng...</div>
+            )}
           </div>
         </div>
       )}

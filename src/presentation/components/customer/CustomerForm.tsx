@@ -1,5 +1,5 @@
 'use client'
-import { CustomerTier } from "@/domain/entities/customer";
+import { CustomerTier } from "@/domain/entities/Customer";
 
 interface Props {
   title: string; name: string; phone: string; email: string; tier: CustomerTier;
