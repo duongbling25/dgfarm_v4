@@ -17,8 +17,8 @@ export type Role = 'admin' | 'manager' | 'staff'
 //  VD: '/giao-dich/dat-hang/nha-phan-phoi' trước '/giao-dich'
 
 export const ROUTE_PERMISSIONS: { path: string; roles: Role[] }[] = [
-  // Chỉ admin
-  { path: '/so-quy',    roles: ['admin'] },
+  // Admin + Manager
+  { path: '/so-quy',    roles: ['admin', 'manager'] },
 
   // Admin + Manager
   { path: '/bao-cao',         roles: ['admin', 'manager'] },
@@ -137,7 +137,7 @@ export const NAV_ITEMS: NavItem[] = [
   {
     label:  'Sổ quỹ',
     href:   '/so-quy',
-    roles:  ['admin'],              // chỉ admin
+    roles:  ['admin', 'manager'],              // admin + manager
   },
   {
     label:  'Báo cáo',
@@ -174,7 +174,7 @@ export function getNavForRole(role: Role): NavItem[] {
 
 export const PERMISSIONS = {
   // Xem sổ quỹ
-  viewSoQuy:        (role: Role) => role === 'admin',
+  viewSoQuy:        (role: Role) => role === 'admin' || role === 'manager',
 
   // Quản lý nhân viên & tài khoản
   manageStaff:      (role: Role) => role === 'admin' || role === 'manager',

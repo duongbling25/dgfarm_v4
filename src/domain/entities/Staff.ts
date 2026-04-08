@@ -15,7 +15,7 @@ export interface Account {
   id: string
   name: string
   email: string
-  role: 'admin' | 'staff'
+  role: 'admin' | 'manager' | 'staff'
   auth_id: string | null
   employee_id: string | null
   pin_hash: string | null

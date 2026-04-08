@@ -12,14 +12,14 @@ export interface IStaffRepository {
   deleteEmployees(ids: string[]): Promise<void>
 
   // Accounts
-  getAccounts(search?: string): Promise<Account[]>
+  getAccounts(search?: string, callerRole?: string): Promise<Account[]>
   addAccount(form: {
-    name: string; email: string; role: 'admin' | 'staff'; employee_id: string
+    name: string; email: string; role: 'admin' | 'manager' | 'staff'; employee_id: string; callerRole?: string
   }): Promise<void>
   updateAccount(id: string, form: {
-    name: string; email: string; role: 'admin' | 'staff'
+    name: string; email: string; role: 'admin' | 'manager' | 'staff'; callerRole?: string
   }): Promise<void>
-  deleteAccounts(ids: string[]): Promise<void>
+  deleteAccounts(ids: string[], callerRole?: string): Promise<void>
 
   // PIN
   verifyPin(accountId: string, pin: string): Promise<boolean>
